@@ -1,0 +1,30 @@
+{
+  "defaults": {
+    "project": 1,
+    "env": 1
+  },
+  "actives": {
+    "project": 1,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "48465000000039008",
+      "name": "AI-Data-Analytics",
+      "domain": {
+        "id": "50045031105",
+        "name": "ai-data-analytics-60083091023.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "60083091023",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    }
+  ]
+}

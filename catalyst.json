@@ -1,0 +1,14 @@
+{
+  "functions": {
+    "targets": [
+      "ai_data_analytics_function",
+      "ai_data_analytics_worker"
+    ],
+    "ignore": [],
+    "source": "functions"
+  },
+  "client": {
+    "source": "react-app",
+    "plugin": "zcatalyst-cli-plugin-react"
+  }
+}

@@ -1,0 +1,17 @@
+{
+	"deployment": {
+		"name": "ai_data_analytics_worker",
+		"stack": "python_3_13",
+		"type": "job",
+		"env_variables": {
+					"ZOHO_CLIENT_ID": "1000.21ZMRPLWFQ2H1JEFS3ERO7BOV7FVRJ", 
+					"ZOHO_CLIENT_SECRET":"d33e120a4c124779e3cad00cf63493beb29e185d71",  
+					"ZOHO_ACCOUNTS_URL":"https://accounts.zoho.in", 
+					"ZOHO_API_DOMAIN":"https://www.zohoapis.in", 
+					"BULK_EXPORT_FOLDER_ID":"48465000000078186"
+		}
+	},
+	"execution": {
+		"main": "main.py"
+	}
+}
