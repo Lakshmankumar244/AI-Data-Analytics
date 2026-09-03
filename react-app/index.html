@@ -8,9 +8,10 @@
     <meta name="description" content="CRM Data Health Scanner" />
     <link rel="apple-touch-icon" href="/logo192.png" />
     <link rel="manifest" href="/manifest.json" />
-    <!-- Light-mode only: confirmed constraint from the original widget — this sits inside
-     a light host page/CRM context and must not follow OS dark mode. -->
-    <meta name="color-scheme" content="only light" />
+    <!-- Light by default: confirmed constraint from the original widget — this sits inside
+     a light host page/CRM context and must not follow OS dark mode on its own.
+     Dark is opt-in via a `.dark` class on <html>, which flips color-scheme in CSS. -->
+    <meta name="color-scheme" content="light" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,6 +20,21 @@
       rel="stylesheet"
     />
     <title>Data Health Scanner</title>
+    <script>
+      // Apply the stored theme before first paint so a dark-mode user never
+      // sees a light flash. Mirrors src/theme/theme.js; kept inline and tiny
+      // because it has to run ahead of the bundle.
+      (function () {
+        try {
+          var stored = localStorage.getItem("dhs-theme");
+          var dark =
+            stored === "dark" ||
+            (stored === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

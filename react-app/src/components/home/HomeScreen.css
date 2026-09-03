@@ -130,7 +130,7 @@
 }
 
 .home-error {
-  color: var(--danger);
+  color: var(--risk);
   margin-bottom: var(--sp-3);
 }
 

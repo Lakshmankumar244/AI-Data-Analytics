@@ -4,20 +4,24 @@
   so the visual language borrows from a lab report: reference ranges,
   precise monospace figures, small-caps section labels, clinical restraint.
 
-  PHASE 1 UPDATE: same structure and reasoning as before, retinted from
-  teal to a blue primary to match the new target direction. The org-verdict
-  ramp (risk/attention/stable/strong) and six record-state colors are
-  UNCHANGED on purpose — they already matched the target's red/amber/green
-  scoring language, so only the brand/accent hue moved.
+  This file is the single source of truth for theme values. Everything else —
+  the legacy component CSS, the Tailwind theme, and the shadcn/ui semantic
+  tokens — reads from here. Nothing downstream should hardcode a colour.
 
   Three type roles:
     --font-display : screen titles, section headers
     --font-body     : copy, labels, controls
     --font-mono     : every number that means something
                        (scores, record counts, thresholds, IDs)
+
+  Themes are opt-in, not OS-driven: dark applies only when a `.dark` class is
+  set on <html>. This preserves the original constraint that the app must not
+  follow the operating system's dark mode on its own.
 */
 
 :root {
+  color-scheme: light;
+
   /* type */
   --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
   --font-body: "Inter", "IBM Plex Sans", system-ui, sans-serif;
@@ -40,6 +44,9 @@
   --brand: #3557dd;
   --brand-soft: #eaeefc;
   --brand-strong: #2743b0;
+
+  /* text/icon colour that sits on top of a filled --brand or --risk surface */
+  --on-brand: #ffffff;
 
   /* org verdict band ramp (risk -> attention -> stable -> strong) */
   --risk: #c0362c;
@@ -95,4 +102,148 @@
   --sp-6: 32px;
   --sp-7: 48px;
   --sp-8: 64px;
+}
+
+/*
+  Dark theme. Only the values that depend on the theme are restated — type,
+  radii and spacing are theme-independent and stay in :root.
+
+  The hues are deliberately the same ones as the light ramp, lifted in
+  lightness so they read against a dark surface, and every "-soft" pair flips
+  from a pale tint to a deep tint. The semantics are unchanged: risk is still
+  red, attention amber, strong green, and the six record states keep their
+  one-family-per-problem-type mapping.
+*/
+.dark {
+  color-scheme: dark;
+
+  /* surface */
+  --paper: #0a0f1e;
+  --surface: #121829;
+  --surface-raised: #1a2135;
+  --surface-sunken: #0e1424;
+  --line: #242c42;
+  --line-strong: #36405c;
+
+  /* text */
+  --ink: #e9edf8;
+  --ink-soft: #a3abc2;
+  --muted: #7b849d;
+
+  /* brand / primary */
+  --brand: #7d97f4;
+  --brand-soft: #1b2444;
+  --brand-strong: #a9bcff;
+
+  --on-brand: #0a0f1e;
+
+  /* org verdict band ramp */
+  --risk: #ef8479;
+  --risk-soft: #3a1b19;
+  --attention: #dfa945;
+  --attention-soft: #362810;
+  --stable: #5fbfa8;
+  --stable-soft: #12302b;
+  --strong: #4bd0a4;
+  --strong-soft: #103226;
+
+  /* six record states */
+  --state-proper: #4bd0a4;
+  --state-proper-soft: #103226;
+  --state-incomplete: #dfa945;
+  --state-incomplete-soft: #362810;
+  --state-inaccurate: #f2915c;
+  --state-inaccurate-soft: #392214;
+  --state-suspicious: #a98af0;
+  --state-suspicious-soft: #261d3e;
+  --state-suspected-duplicate: #7d97f4;
+  --state-suspected-duplicate-soft: #1b2444;
+  --state-confirmed-duplicate: #ef8479;
+  --state-confirmed-duplicate-soft: #3a1b19;
+
+  /* six-tier matrix cell ramp */
+  --matrix-excellent: #4bd0a4;
+  --matrix-excellent-soft: #103226;
+  --matrix-good: #5fbfa8;
+  --matrix-good-soft: #12302b;
+  --matrix-ok: #9aa3ba;
+  --matrix-ok-soft: #222939;
+  --matrix-fair: #dfa945;
+  --matrix-fair-soft: #362810;
+  --matrix-warn: #f2915c;
+  --matrix-warn-soft: #392214;
+  --matrix-bad: #ef8479;
+  --matrix-bad-soft: #3a1b19;
+
+  /* shadows need real black on a dark surface to read as depth */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+
+/*
+  shadcn/ui semantic layer.
+
+  These are aliases, never new values: each one points at a product token
+  above, so a theme change or a palette tweak only ever happens in one place.
+  Declared for both selectors so that a `.dark` applied to a subtree (rather
+  than to <html>) still recomputes them against that subtree's product tokens.
+
+  One deliberate deviation from stock shadcn: `--muted` already exists in this
+  product as the muted *foreground* colour and is used that way across the
+  legacy CSS. Rather than redefine it and break those screens, the muted
+  surface is exposed as `--muted-surface`, and global.css wires Tailwind's
+  `bg-muted` / `text-muted-foreground` utilities to the correct pair.
+*/
+:root,
+.dark {
+  --background: var(--paper);
+  --foreground: var(--ink);
+
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--ink);
+
+  --primary: var(--brand);
+  --primary-foreground: var(--on-brand);
+  --secondary: var(--surface-sunken);
+  --secondary-foreground: var(--ink);
+
+  --muted-surface: var(--surface-sunken);
+  --muted-foreground: var(--muted);
+
+  --accent: var(--brand-soft);
+  --accent-foreground: var(--brand-strong);
+
+  --destructive: var(--risk);
+  --destructive-foreground: var(--on-brand);
+
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--brand);
+
+  /*
+    shadcn derives its whole radius ramp from a single --radius. Point it at
+    the product's control radius, which is what .btn already uses, so shadcn
+    buttons and inputs match the existing ones. This is not circular with the
+    --radius-sm that global.css declares in @theme: theme output is layered
+    and this file is not, so the product value always wins here.
+  */
+  --radius: var(--radius-sm);
+
+  /* chart slots reuse product hues so charts stay inside the palette */
+  --chart-1: var(--brand);
+  --chart-2: var(--state-suspicious);
+  --chart-3: var(--attention);
+  --chart-4: var(--state-inaccurate);
+  --chart-5: var(--stable);
+
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--on-brand);
+  --sidebar-accent: var(--brand-soft);
+  --sidebar-accent-foreground: var(--brand-strong);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--brand);
 }

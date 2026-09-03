@@ -1,4 +1,24 @@
+/*
+  Tailwind is imported WITHOUT Preflight while the legacy screens are still
+  hand-written CSS. Preflight is a global reset (it drops heading sizes, list
+  markers, link styling and UA control chrome) and every existing screen was
+  authored against those defaults, so enabling it now would restyle the whole
+  app before any screen has been migrated. Swap the two imports below for a
+  plain `@import "tailwindcss";` once the screens move to utilities.
+
+  Note on the cascade: everything Tailwind emits is inside a layer, and all of
+  the app's own CSS is unlayered, so app rules always win over Tailwind's base
+  layer regardless of specificity.
+*/
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 @import "./tokens.css";
+
+/* Dark is an explicit opt-in class on <html>, never a prefers-color-scheme match. */
+@custom-variant dark (&:is(.dark *));
 
 * {
   box-sizing: border-box;
@@ -87,3 +107,130 @@ select {
     transition-duration: 0.001ms !important;
   }
 }
+
+/*
+  Bridge: expose the product tokens from tokens.css as Tailwind theme values so
+  utilities and shadcn/ui components resolve to the same colours the legacy CSS
+  uses. `inline` keeps the var() reference live, so `bg-card` follows the active
+  theme without a second set of dark-mode utilities.
+
+  The radius ramp needs care because tokens.css already uses the names
+  --radius-sm/md/lg for the product's own scale. `inline` resolves that: the
+  generated utilities embed the declared expression (`calc(var(--radius) *
+  0.8)`) rather than a `var(--radius-md)` reference, so `rounded-*` is driven
+  by --radius while the legacy CSS keeps reading the product values. --radius
+  itself is the product's control radius, which is what shadcn sizes buttons
+  and inputs against.
+*/
+@theme inline {
+  /* shadcn semantic tokens */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted-surface);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* product surfaces and text */
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--muted);
+  --color-on-brand: var(--on-brand);
+
+  /* brand */
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-strong: var(--brand-strong);
+
+  /* org verdict band ramp */
+  --color-risk: var(--risk);
+  --color-risk-soft: var(--risk-soft);
+  --color-attention: var(--attention);
+  --color-attention-soft: var(--attention-soft);
+  --color-stable: var(--stable);
+  --color-stable-soft: var(--stable-soft);
+  --color-strong: var(--strong);
+  --color-strong-soft: var(--strong-soft);
+
+  /* six record states */
+  --color-state-proper: var(--state-proper);
+  --color-state-proper-soft: var(--state-proper-soft);
+  --color-state-incomplete: var(--state-incomplete);
+  --color-state-incomplete-soft: var(--state-incomplete-soft);
+  --color-state-inaccurate: var(--state-inaccurate);
+  --color-state-inaccurate-soft: var(--state-inaccurate-soft);
+  --color-state-suspicious: var(--state-suspicious);
+  --color-state-suspicious-soft: var(--state-suspicious-soft);
+  --color-state-suspected-duplicate: var(--state-suspected-duplicate);
+  --color-state-suspected-duplicate-soft: var(--state-suspected-duplicate-soft);
+  --color-state-confirmed-duplicate: var(--state-confirmed-duplicate);
+  --color-state-confirmed-duplicate-soft: var(--state-confirmed-duplicate-soft);
+
+  /* six-tier matrix ramp */
+  --color-matrix-excellent: var(--matrix-excellent);
+  --color-matrix-excellent-soft: var(--matrix-excellent-soft);
+  --color-matrix-good: var(--matrix-good);
+  --color-matrix-good-soft: var(--matrix-good-soft);
+  --color-matrix-ok: var(--matrix-ok);
+  --color-matrix-ok-soft: var(--matrix-ok-soft);
+  --color-matrix-fair: var(--matrix-fair);
+  --color-matrix-fair-soft: var(--matrix-fair-soft);
+  --color-matrix-warn: var(--matrix-warn);
+  --color-matrix-warn-soft: var(--matrix-warn-soft);
+  --color-matrix-bad: var(--matrix-bad);
+  --color-matrix-bad-soft: var(--matrix-bad-soft);
+
+  /* typography */
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-display);
+
+  /* geometry */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --shadow-panel: var(--shadow-card);
+  --shadow-floating: var(--shadow-float);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+}
+

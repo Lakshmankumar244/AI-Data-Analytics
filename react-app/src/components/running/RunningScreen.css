@@ -48,7 +48,7 @@
 }
 
 .running-operation-stopped {
-  color: var(--danger);
+  color: var(--risk);
 }
 
 .running-operation-completed {
@@ -72,7 +72,7 @@
 
 .running-error {
   margin-top: var(--sp-3);
-  color: var(--danger);
+  color: var(--risk);
   font-size: 13px;
 }
 

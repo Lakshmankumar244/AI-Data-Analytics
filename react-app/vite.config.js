@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 const CLIENT_PACKAGE_JSON = "client-package.json";
 
@@ -35,7 +37,12 @@ function catalystDeployArtifact() {
 export default defineConfig({
   // Catalyst web client hosting serves the app under /app.
   base: "/app/",
-  plugins: [react(), catalystDeployArtifact()],
+  plugins: [react(), tailwindcss(), catalystDeployArtifact()],
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
   build: {
     outDir: "build",
     emptyOutDir: true,
