@@ -1,0 +1,28 @@
+{
+  "records": [
+    { "id": "4681200000123456", "module": "Deals", "state": "inaccurate", "severity": "medium", "reason": "Open deal past its close date", "createdBy": "Ananya Rao", "createdTime": "2026-05-02T10:14:00Z" },
+    { "id": "4681200000123789", "module": "Leads", "state": "incomplete", "severity": "high", "reason": "Stage-required field empty at Qualified", "createdBy": "Ananya Rao", "createdTime": "2026-06-11T08:02:00Z" },
+    { "id": "4681200000124012", "module": "Accounts", "state": "incomplete", "severity": "high", "reason": "Report critical field empty: Billing_Country", "createdBy": "Ananya Rao", "createdTime": "2026-06-18T09:41:00Z" },
+    { "id": "4681200000124315", "module": "Contacts", "state": "incomplete", "severity": "medium", "reason": "Report critical field empty: Phone", "createdBy": "Ananya Rao", "createdTime": "2026-06-22T14:07:00Z" },
+    { "id": "4681200000124588", "module": "Leads", "state": "incomplete", "severity": "high", "reason": "Report critical field empty: Company, Industry", "createdBy": "Ananya Rao", "createdTime": "2026-06-30T11:22:00Z" },
+    { "id": "4681200000124811", "module": "Deals", "state": "inaccurate", "severity": "medium", "reason": "Amount outside plausible range for this pipeline", "createdBy": "Ananya Rao", "createdTime": "2026-07-03T16:55:00Z" },
+    { "id": "4681200000125044", "module": "Accounts", "state": "inaccurate", "severity": "high", "reason": "Statutory ID failed checksum validation", "createdBy": "Ananya Rao", "createdTime": "2026-07-05T09:12:00Z" },
+    { "id": "4681200000125277", "module": "Leads", "state": "suspicious", "severity": "medium", "reason": "Unusual creation burst - 15 records within 5 minutes", "createdBy": "Ananya Rao", "createdTime": "2026-07-09T02:31:00Z" },
+    { "id": "4681200000125500", "module": "Leads", "state": "suspicious", "severity": "medium", "reason": "Unusual creation burst - 15 records within 5 minutes", "createdBy": "Ananya Rao", "createdTime": "2026-07-09T02:33:00Z" },
+    { "id": "4681200000125733", "module": "Contacts", "state": "suspicious", "severity": "low", "reason": "Off-hours creation pattern outside business calendar", "createdBy": "Ananya Rao", "createdTime": "2026-07-14T23:47:00Z" },
+    { "id": "4681200000125966", "module": "Accounts", "state": "suspected_duplicate", "severity": "medium", "reason": "Matches an existing Accounts record on name and phone (fuzzy)", "createdBy": "Ananya Rao", "createdTime": "2026-07-18T13:20:00Z" },
+    { "id": "4681200000126199", "module": "Contacts", "state": "suspected_duplicate", "severity": "medium", "reason": "Matches an existing Contacts record on email and name similarity", "createdBy": "Ananya Rao", "createdTime": "2026-07-20T10:05:00Z" },
+    { "id": "4681200000126422", "module": "Leads", "state": "suspected_duplicate", "severity": "low", "reason": "Matches an existing Leads record on phone within the same block", "createdBy": "Ananya Rao", "createdTime": "2026-07-22T15:38:00Z" },
+    { "id": "4681200000126655", "module": "Accounts", "state": "confirmed_duplicate", "severity": "high", "reason": "Exact match on statutory ID with an existing Accounts record", "createdBy": "Ananya Rao", "createdTime": "2026-07-25T08:59:00Z" },
+    { "id": "4681200000126888", "module": "Contacts", "state": "confirmed_duplicate", "severity": "high", "reason": "Exact match on email and phone with an existing Contacts record", "createdBy": "Ananya Rao", "createdTime": "2026-07-28T12:14:00Z" },
+    { "id": "4681200000127111", "module": "Deals", "state": "incomplete", "severity": "medium", "reason": "Stage-required field empty at Negotiation", "createdBy": "Ananya Rao", "createdTime": "2026-08-01T09:26:00Z" },
+    { "id": "4681200000127344", "module": "Leads", "state": "inaccurate", "severity": "low", "reason": "Value outside plausible range for lead score", "createdBy": "Ananya Rao", "createdTime": "2026-08-04T17:03:00Z" },
+    { "id": "4681200000127577", "module": "Accounts", "state": "incomplete", "severity": "medium", "reason": "Report critical field empty: Industry", "createdBy": "Ananya Rao", "createdTime": "2026-08-08T10:47:00Z" },
+    { "id": "4681200000127800", "module": "Contacts", "state": "incomplete", "severity": "low", "reason": "Report critical field empty: Title", "createdBy": "Ananya Rao", "createdTime": "2026-08-12T14:19:00Z" },
+    { "id": "4681200000128033", "module": "Deals", "state": "suspicious", "severity": "low", "reason": "Off-hours creation pattern outside business calendar", "createdBy": "Ananya Rao", "createdTime": "2026-08-15T22:58:00Z" },
+    { "id": "4681200000128266", "module": "Leads", "state": "incomplete", "severity": "high", "reason": "Report critical field empty: Company, Industry", "createdBy": "Ananya Rao", "createdTime": "2026-08-18T11:31:00Z" },
+    { "id": "4681200000128499", "module": "Accounts", "state": "inaccurate", "severity": "medium", "reason": "Statutory ID failed checksum validation", "createdBy": "Ananya Rao", "createdTime": "2026-08-20T09:04:00Z" },
+    { "id": "4681200000128722", "module": "Contacts", "state": "inaccurate", "severity": "low", "reason": "Value outside plausible range for engagement score", "createdBy": "Ananya Rao", "createdTime": "2026-08-22T16:42:00Z" },
+    { "id": "4681200000128955", "module": "Leads", "state": "confirmed_duplicate", "severity": "high", "reason": "Exact match on email and phone with an existing Leads record", "createdBy": "Ananya Rao", "createdTime": "2026-08-23T13:57:00Z" }
+  ]
+}

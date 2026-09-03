@@ -1,0 +1,147 @@
+.home-screen {
+  padding: var(--sp-6) var(--sp-6) var(--sp-8);
+}
+
+.home-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-6);
+}
+
+.home-header h1 {
+  margin-top: var(--sp-1);
+  font-size: 28px;
+}
+
+.home-header p:not(.eyebrow) {
+  margin-top: var(--sp-2);
+  color: var(--ink-soft);
+}
+
+.home-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.history-panel h2 {
+  margin-top: 2px;
+  font-size: 20px;
+}
+
+.history-count {
+  color: var(--muted);
+}
+
+.history-tools {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-3);
+}
+
+.history-table-wrap {
+  overflow-x: auto;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.history-table th,
+.history-table td {
+  padding: 11px 12px;
+  text-align: left;
+  border-top: 1px solid var(--line);
+}
+
+.history-table thead th {
+  border-top: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.history-table tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+.history-status {
+  display: inline-block;
+  padding: 4px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.history-action {
+  text-align: right !important;
+}
+
+.history-account-name,
+.history-account-email {
+  display: block;
+}
+
+.history-modules {
+  max-width: 420px;
+}
+
+.history-modules-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  margin-top: 4px;
+  padding: 0;
+}
+
+.history-modules-toggle:hover {
+  text-decoration: underline;
+}
+
+.history-account-email {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.history-empty,
+.home-error {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.home-notice {
+  margin: calc(var(--sp-6) * -1 + var(--sp-2)) 0 var(--sp-4);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.home-error {
+  color: var(--danger);
+  margin-bottom: var(--sp-3);
+}
+
+@media (max-width: 720px) {
+  .home-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .history-panel .panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

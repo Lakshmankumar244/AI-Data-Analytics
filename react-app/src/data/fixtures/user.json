@@ -1,0 +1,11 @@
+{
+  "name": "Ananya Rao",
+  "records": 409,
+  "score": 61,
+  "priorScore": 55,
+  "stateBreakdown": {
+    "proper": 214, "incomplete": 96, "inaccurate": 58,
+    "suspicious": 21, "suspected_duplicate": 14, "confirmed_duplicate": 6
+  },
+  "trend": [52, 54, 53, 55, 58, 61]
+}

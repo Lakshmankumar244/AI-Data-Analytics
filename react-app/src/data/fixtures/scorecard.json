@@ -1,0 +1,38 @@
+{
+  "scanId": "scan_20260821_001",
+  "scope": "personal",
+  "connectedUser": { "name": "Ananya Rao" },
+  "overallScore": 53,
+  "priorScore": 55,
+  "measuredPoints": 93,
+  "possiblePoints": 100,
+  "unmeasuredDomains": [
+    { "domain": "pii", "reason": "Needs broader access than a Personal Check grants." },
+    { "domain": "automation", "reason": "Needs broader access than a Personal Check grants." }
+  ],
+  "recordsInScope": 409,
+  "stateBreakdown": {
+    "proper": 214,
+    "incomplete": 96,
+    "inaccurate": 58,
+    "suspicious": 21,
+    "suspected_duplicate": 14,
+    "confirmed_duplicate": 6
+  },
+  "domainScores": [
+    { "domain": "completeness", "weight": 20, "score": 58, "applicable": true },
+    { "domain": "duplication", "weight": 20, "score": 34, "applicable": true },
+    { "domain": "validity", "weight": 15, "score": 78, "applicable": true },
+    { "domain": "plausibility", "weight": 10, "score": 57, "applicable": true },
+    { "domain": "freshness", "weight": 10, "score": 41, "applicable": true },
+    { "domain": "integrity", "weight": 10, "score": 66, "applicable": true },
+    { "domain": "config", "weight": 8, "score": 38, "applicable": true },
+    { "domain": "pii", "weight": 4, "score": null, "applicable": false },
+    { "domain": "automation", "weight": 3, "score": null, "applicable": false }
+  ],
+  "movers": [
+    { "type": "module", "label": "Deals", "delta": -9 },
+    { "type": "module", "label": "Contacts", "delta": 6 },
+    { "type": "domain", "label": "Freshness", "delta": -5 }
+  ]
+}

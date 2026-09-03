@@ -1,0 +1,215 @@
+.overview-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6) var(--sp-7);
+}
+
+.overview-reuse-notice {
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.overview-score-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.overview-score-panel::after {
+  content: "";
+  position: absolute;
+  width: calc(var(--sp-8) * 4);
+  height: calc(var(--sp-8) * 4);
+  right: calc(var(--sp-8) * -1);
+  top: calc(var(--sp-8) * -2);
+  border-radius: 50%;
+  background: var(--brand-soft);
+  pointer-events: none;
+}
+
+.overview-score-panel h1 {
+  margin-top: var(--sp-1);
+  font-size: clamp(22px, 2.2vw, 30px);
+}
+
+.overview-gauge-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+
+.overview-gauge-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.overview-gauge-stats > div + div {
+  padding-left: var(--sp-4);
+  border-left: 1px solid var(--line);
+}
+
+.overview-gauge-stats span,
+.overview-stat span,
+.overview-created-label,
+.overview-created-value {
+  color: var(--muted);
+}
+
+.overview-gauge-stats strong,
+.overview-stat strong {
+  color: var(--ink);
+}
+
+.overview-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-3);
+}
+
+.overview-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--overview-stat-color);
+  border-radius: var(--radius-sm);
+  background: var(--overview-stat-soft);
+}
+
+.overview-stat strong {
+  color: var(--overview-stat-color);
+}
+
+.overview-stat-critical {
+  --overview-stat-color: var(--risk);
+  --overview-stat-soft: var(--risk-soft);
+}
+
+.overview-primary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+}
+
+.overview-insights-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-5);
+}
+
+.overview-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.overview-preview-label {
+  color: var(--muted);
+}
+
+.overview-clear-focus {
+  min-height: 34px;
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.overview-clear-focus:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.overview-created-chart {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(var(--sp-3), 1fr));
+  align-items: end;
+  gap: var(--sp-2);
+  min-height: calc(var(--sp-8) * 3);
+}
+
+.overview-created-column {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--sp-2);
+  height: 100%;
+  text-align: center;
+}
+
+.overview-created-track {
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  min-height: calc(var(--sp-8) * 2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.overview-created-bar {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.overview-findings-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-findings-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  color: var(--ink-soft);
+}
+
+.overview-findings-list li + li {
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 900px) {
+  .overview-primary-grid,
+  .overview-insights-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .overview-tab {
+    padding: var(--sp-4) var(--sp-3) var(--sp-6);
+  }
+
+  .overview-gauge-stats,
+  .overview-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-gauge-stats > div + div {
+    padding-top: var(--sp-3);
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+}

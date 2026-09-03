@@ -1,0 +1,51 @@
+.connect-panel {
+  margin-top: var(--sp-3);
+  background: var(--surface-1);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  padding: var(--sp-8) var(--sp-5);
+  text-align: center;
+}
+
+.connect-panel-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg-accent-muted);
+  color: var(--text-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--sp-4);
+}
+
+.connect-panel-title {
+  font-weight: 500;
+  font-size: 16px;
+  color: var(--text-primary);
+  margin: 0 0 var(--sp-2);
+}
+
+.connect-panel-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 340px;
+  margin: 0 auto var(--sp-5);
+}
+
+.connect-panel-notice {
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-4);
+}
+
+.connect-panel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

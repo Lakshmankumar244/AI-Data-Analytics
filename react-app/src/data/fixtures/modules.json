@@ -1,0 +1,41 @@
+{
+  "stageAware": true,
+  "modules": [
+    {
+      "apiName": "Leads",
+      "label": "Leads",
+      "overall": 64,
+      "domains": {
+        "completeness": 61, "duplication": 40, "validity": 82, "plausibility": 59,
+        "freshness": 48, "integrity": 70, "config": 38, "pii": null, "automation": null
+      }
+    },
+    {
+      "apiName": "Contacts",
+      "label": "Contacts",
+      "overall": 71,
+      "domains": {
+        "completeness": 74, "duplication": 52, "validity": 88, "plausibility": 66,
+        "freshness": 55, "integrity": 77, "config": 38, "pii": null, "automation": null
+      }
+    },
+    {
+      "apiName": "Deals",
+      "label": "Deals",
+      "overall": 49,
+      "domains": {
+        "completeness": 42, "duplication": null, "validity": 68, "plausibility": 44,
+        "freshness": 21, "integrity": 58, "config": 38, "pii": null, "automation": null
+      }
+    },
+    {
+      "apiName": "Accounts",
+      "label": "Accounts",
+      "overall": 58,
+      "domains": {
+        "completeness": 55, "duplication": 61, "validity": 74, "plausibility": null,
+        "freshness": 39, "integrity": 63, "config": 38, "pii": null, "automation": null
+      }
+    }
+  ]
+}

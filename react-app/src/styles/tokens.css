@@ -1,0 +1,98 @@
+/*
+  Design direction: a diagnostic instrument, not a generic SaaS dashboard.
+  The product's own vocabulary is medical/lab ("health", "scan", "state"),
+  so the visual language borrows from a lab report: reference ranges,
+  precise monospace figures, small-caps section labels, clinical restraint.
+
+  PHASE 1 UPDATE: same structure and reasoning as before, retinted from
+  teal to a blue primary to match the new target direction. The org-verdict
+  ramp (risk/attention/stable/strong) and six record-state colors are
+  UNCHANGED on purpose — they already matched the target's red/amber/green
+  scoring language, so only the brand/accent hue moved.
+
+  Three type roles:
+    --font-display : screen titles, section headers
+    --font-body     : copy, labels, controls
+    --font-mono     : every number that means something
+                       (scores, record counts, thresholds, IDs)
+*/
+
+:root {
+  /* type */
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* surface */
+  --paper: #f4f6fb;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eef1f8;
+  --line: #e4e8f1;
+  --line-strong: #ccd3e3;
+
+  /* text */
+  --ink: #131a2c;
+  --ink-soft: #57607a;
+  --muted: #868fac;
+
+  /* brand / primary — was teal (#0f766e), now blue to match target */
+  --brand: #3557dd;
+  --brand-soft: #eaeefc;
+  --brand-strong: #2743b0;
+
+  /* org verdict band ramp (risk -> attention -> stable -> strong) */
+  --risk: #c0362c;
+  --risk-soft: #fbeae8;
+  --attention: #b3760a;
+  --attention-soft: #fbf1dc;
+  --stable: #2e7d6b;
+  --stable-soft: #e7f2ee;
+  --strong: #1f8f6f;
+  --strong-soft: #e2f3ec;
+
+  /* six record states - color family = problem type, shade = severity */
+  --state-proper: #1f8f6f;
+  --state-proper-soft: #e2f3ec;
+  --state-incomplete: #b3760a;
+  --state-incomplete-soft: #fbf1dc;
+  --state-inaccurate: #c2410c;
+  --state-inaccurate-soft: #fce7dc;
+  --state-suspicious: #6b46c1;
+  --state-suspicious-soft: #eee7fa;
+  --state-suspected-duplicate: #3557dd;
+  --state-suspected-duplicate-soft: #e7ebfb;
+  --state-confirmed-duplicate: #c0362c;
+  --state-confirmed-duplicate-soft: #fbeae8;
+
+  /* six-tier matrix cell ramp (Modules screen) */
+  --matrix-excellent: #1f8f6f;
+  --matrix-excellent-soft: #e2f3ec;
+  --matrix-good: #2e7d6b;
+  --matrix-good-soft: #e7f2ee;
+  --matrix-ok: #4b5563;
+  --matrix-ok-soft: #eef0f5;
+  --matrix-fair: #b3760a;
+  --matrix-fair-soft: #fbf1dc;
+  --matrix-warn: #c2410c;
+  --matrix-warn-soft: #fce7dc;
+  --matrix-bad: #c0362c;
+  --matrix-bad-soft: #fbeae8;
+
+  /* geometry — slightly larger radii, a touch more "dashboard" than "paper" */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --shadow-card: 0 1px 2px rgba(19, 26, 44, 0.04), 0 10px 30px rgba(19, 26, 44, 0.05);
+  --shadow-float: 0 18px 50px rgba(19, 26, 44, 0.14);
+
+  /* spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+}

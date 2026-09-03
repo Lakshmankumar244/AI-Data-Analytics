@@ -1,0 +1,54 @@
+{
+  "actions": [
+    {
+      "id": "backfill-required-fields",
+      "title": "Backfill required fields by stage",
+      "description": "Fields marked required at a record's current stage are empty. These need a value entered manually - nothing here can be inferred automatically.",
+      "actionType": "manual",
+      "targetStates": ["incomplete"],
+      "recordCount": 96,
+      "modules": ["Leads", "Contacts", "Accounts", "Deals"],
+      "pointGain": 6.5
+    },
+    {
+      "id": "correct-flagged-values",
+      "title": "Correct flagged field values",
+      "description": "Values that failed a validity check - out-of-range amounts, failed statutory ID checksums, and similar. Each needs a look before correcting; not safe to bulk-overwrite.",
+      "actionType": "manual",
+      "targetStates": ["inaccurate"],
+      "recordCount": 58,
+      "modules": ["Leads", "Contacts", "Accounts", "Deals"],
+      "pointGain": 3.4
+    },
+    {
+      "id": "review-suspicious-bursts",
+      "title": "Review suspicious creation patterns with the team",
+      "description": "Unusual creation bursts or off-hours activity. This is a review action, not a data fix - some of these will turn out to be legitimate (a trade show, a bulk import). No point gain is promised here, since resolution depends on what the review finds, not on this app changing anything.",
+      "actionType": "review",
+      "targetStates": ["suspicious"],
+      "recordCount": 21,
+      "modules": ["Leads", "Contacts", "Accounts", "Deals"],
+      "pointGain": null
+    },
+    {
+      "id": "review-suspected-duplicates",
+      "title": "Review suspected duplicates",
+      "description": "These matched on fuzzy signals (name similarity, shared blocking key) below the confirmation threshold. Per the confirmed duplicate policy, nothing here auto-merges - each needs a human look to confirm it's actually the same record before any merge happens.",
+      "actionType": "review",
+      "targetStates": ["suspected_duplicate"],
+      "recordCount": 14,
+      "modules": ["Leads", "Contacts", "Accounts"],
+      "pointGain": null
+    },
+    {
+      "id": "merge-confirmed-duplicates",
+      "title": "Merge confirmed duplicates",
+      "description": "Exact match on a strong identifier, or exact match on email and phone together - the only two paths that auto-confirm a duplicate. This app is read-only and cannot merge records itself; this is the list to hand to whoever has write access.",
+      "actionType": "manual",
+      "targetStates": ["confirmed_duplicate"],
+      "recordCount": 6,
+      "modules": ["Leads", "Contacts", "Accounts"],
+      "pointGain": 2.6
+    }
+  ]
+}

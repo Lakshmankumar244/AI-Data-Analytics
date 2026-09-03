@@ -1,0 +1,14 @@
+.modules-tab { display: flex; flex-direction: column; gap: 18px; padding: 24px clamp(16px,3vw,40px) 48px; }
+.modules-panel .panel-header { align-items: flex-start; flex-wrap: wrap; gap: 16px; }
+.modules-panel h1 { font-size: clamp(20px,2vw,26px); margin-top: 3px; }
+.modules-floor-note { font-size: 11px; color: var(--muted); max-width: 340px; text-align: right; }
+.module-detail .panel-header { align-items: flex-start; gap: 18px; }
+.module-detail h2 { margin-top: 3px; font-size: 20px; }
+.module-detail-count { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.module-domain-summary { display: flex; gap: 8px; flex-wrap: wrap; }
+.module-domain-summary span { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-sunken); color: var(--ink-soft); font-size: 11px; }
+.module-domain-summary strong { margin-left: 5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.module-recommendations { margin-top: 22px; padding: 18px; border: 1px solid #f0dfbb; border-radius: 12px; background: #fffbf2; }
+.module-recommendations ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink-soft); font-size: 12px; }
+.module-recommendations li + li { margin-top: 6px; }
+@media (max-width: 720px) { .modules-tab { padding: 16px 12px 32px; } .modules-floor-note { text-align: left; } }

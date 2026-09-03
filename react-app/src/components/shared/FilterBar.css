@@ -1,0 +1,277 @@
+.filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  width: 100%;
+  padding: 12px max(var(--sp-4), calc((100vw - 1480px) / 2 + var(--sp-6)));
+  background: rgba(244, 246, 251, 0.94);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(18px);
+}
+
+/* single row: back link, title, filters, actions.
+   overflow is intentionally NOT set here - clipping it was what trapped
+   dropdown panels behind the tab nav below. Horizontal scrolling on very
+   narrow screens is handled per-control instead (see media query). */
+.filter-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: nowrap;
+}
+
+.filter-bar-back {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.filter-bar-back:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+  background: var(--brand-soft);
+}
+
+.filter-bar-title-block {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding-right: 16px;
+  border-right: 1px solid var(--line);
+}
+
+.filter-bar-title-block h1 {
+  font-size: 18px;
+  line-height: 1.2;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-bar-subtitle {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-control {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.filter-control-value {
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.filter-control-placeholder {
+  color: var(--ink-soft);
+}
+
+.filter-control-strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.filter-control-compare {
+  padding-left: 20px;
+  border-left: 1px solid var(--line);
+}
+
+/* ---------- real dropdowns (Modules, Attribution, Users-disabled) ---------- */
+.filter-dropdown {
+  position: relative;
+}
+
+.filter-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.filter-dropdown-trigger:hover .filter-control-value,
+.filter-dropdown-trigger[aria-expanded="true"] .filter-control-value {
+  color: var(--brand-strong);
+}
+
+.filter-dropdown-trigger-disabled {
+  cursor: not-allowed;
+}
+
+.filter-dropdown-trigger-disabled .filter-control-value,
+.filter-dropdown-trigger-disabled .filter-dropdown-caret {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.filter-dropdown-trigger-disabled:hover .filter-control-value {
+  color: var(--muted);
+}
+
+.filter-dropdown-caret {
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.filter-dropdown-trigger[aria-expanded="true"] .filter-dropdown-caret {
+  transform: rotate(180deg);
+  color: var(--brand-strong);
+}
+
+.filter-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 30;
+  min-width: 200px;
+  max-width: 300px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float);
+}
+
+.filter-dropdown-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.filter-dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink-soft);
+}
+
+.filter-dropdown-option:hover {
+  background: var(--surface-sunken);
+}
+
+.filter-dropdown-option[aria-pressed="true"] {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-weight: 650;
+}
+
+/* multi-select variant (Modules) - small checkbox square instead of
+   the whole row just changing color, so it reads as "select many"
+   rather than "pick one" like Attribution's single-select rows. */
+.filter-dropdown-checkbox {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.filter-dropdown-option-checkbox[aria-pressed="true"] .filter-dropdown-checkbox {
+  border-color: var(--brand);
+  background-color: var(--brand);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.5 8.5L6.5 11.5L12.5 4.5' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 11px 11px;
+}
+
+.filter-bar-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-bar-chips .chip {
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+/* ---------- print / export, pinned to the far right ---------- */
+.filter-bar-actions {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.filter-bar-action {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.filter-bar-action:hover {
+  color: var(--brand-strong);
+}
+
+.filter-bar-action-caret {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ---------- responsive: title first to shrink, then wrap to two lines ---------- */
+@media (max-width: 1180px) {
+  .filter-bar-title-block h1,
+  .filter-bar-subtitle {
+    max-width: 130px;
+  }
+}
+
+@media (max-width: 900px) {
+  .filter-bar-row {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .filter-bar-title-block {
+    border-right: none;
+    padding-right: 0;
+  }
+  .filter-bar-actions {
+    margin-left: 0;
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 560px) {
+  .filter-bar { padding: 10px 12px; }
+  .filter-bar-row { gap: 14px; }
+}

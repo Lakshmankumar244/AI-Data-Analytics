@@ -1,0 +1,16 @@
+{
+  "connectionId": "conn_8841",
+  "connectedUser": {
+    "name": "Ananya Rao",
+    "email": "ananya.rao@examplecrm.in",
+    "profile": "Standard"
+  },
+  "dc": "in",
+  "connectedAt": "2026-08-14T09:12:00Z",
+  "accessibleModules": [
+    { "apiName": "Leads", "label": "Leads", "recordCount": 214 },
+    { "apiName": "Contacts", "label": "Contacts", "recordCount": 96 },
+    { "apiName": "Deals", "label": "Deals", "recordCount": 58 },
+    { "apiName": "Accounts", "label": "Accounts", "recordCount": 41 }
+  ]
+}

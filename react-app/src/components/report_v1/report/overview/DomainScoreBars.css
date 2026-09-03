@@ -1,0 +1,23 @@
+.domain-score-bars {
+  display: flex;
+  flex-direction: column;
+}
+
+.domain-score-bars > * + * {
+  border-top: 0;
+}
+
+.domain-score-coverage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.domain-score-coverage strong { color: var(--ink-soft); font-size: 12px; }

@@ -1,0 +1,78 @@
+.state-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.state-breakdown-bar {
+  display: flex;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.state-segment {
+  border: none;
+  padding: 0;
+  height: 100%;
+  min-width: 3px;
+  cursor: pointer;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+.state-segment:hover {
+  filter: brightness(0.92);
+}
+
+.state-segment-dimmed {
+  opacity: 0.35;
+}
+
+.state-segment-focused {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.state-breakdown-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-4);
+}
+
+.state-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.state-legend-item:hover {
+  background: var(--surface-sunken);
+}
+
+.state-legend-item-focused {
+  border-color: var(--line-strong);
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.state-legend-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.state-legend-count {
+  font-size: 12px;
+  color: var(--muted);
+}
