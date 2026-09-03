@@ -3,6 +3,7 @@ import { useAppDispatch, useAppState } from "../../state/AppContext";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
 import { activateConnection, getScanHistory, getScanResults } from "../../data/client";
 import { formatNumber } from "../../utils/format";
+import { ContentContainer, PageHeader } from "../layout";
 import Band from "../shared/Band";
 import Dropdown from "../shared/Dropdown";
 import "./HomeScreen.css";
@@ -149,19 +150,17 @@ export default function HomeScreen() {
   }
 
   return (
-    <div className="home-screen">
-      <header className="home-header">
-        <div>
-          <p className="eyebrow">Data health</p>
-          <h1>Reports and scans</h1>
-          <p>
-            {connection
-              ? `Connected to ${connection.organizationName || "Zoho CRM"} as ${connection.connectedUser.name || connection.connectedUser.email}.`
-              : "Connect Zoho CRM to start a new scan."}
-          </p>
-        </div>
-        <div className="home-actions">
-          {connection ? (
+    <ContentContainer className="home-screen">
+      <PageHeader
+        eyebrow="Data health"
+        title="Reports and scans"
+        description={
+          connection
+            ? `Connected to ${connection.organizationName || "Zoho CRM"} as ${connection.connectedUser.name || connection.connectedUser.email}.`
+            : "Connect Zoho CRM to start a new scan."
+        }
+        actions={
+          connection ? (
             <>
               {connection.availableConnections?.length > 1 && (
                 <Dropdown
@@ -200,9 +199,9 @@ export default function HomeScreen() {
             >
               Connect Zoho CRM
             </button>
-          )}
-        </div>
-      </header>
+          )
+        }
+      />
 
       {connectionNotice && <p className="home-notice">{connectionNotice}</p>}
 
@@ -321,6 +320,6 @@ export default function HomeScreen() {
           </div>
         )}
       </section>
-    </div>
+    </ContentContainer>
   );
 }

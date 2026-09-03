@@ -2,7 +2,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
-  padding: var(--sp-5) var(--sp-6) var(--sp-7);
+  /* Horizontal insetting belongs to the shared content container, which is
+     also what the filter bar and tab bar align to. */
+  padding-block: var(--sp-5) var(--sp-7);
+  min-width: 0;
 }
 
 .overview-reuse-notice {
@@ -33,7 +36,9 @@
 
 .overview-score-panel h1 {
   margin-top: var(--sp-1);
-  font-size: clamp(22px, 2.2vw, 30px);
+  /* cqi, not vw: the panel scales with the main column, which is 76px
+     narrower than the viewport and narrower again at browser zoom. */
+  font-size: clamp(22px, 2.2cqi, 30px);
 }
 
 .overview-gauge-stats {
@@ -185,7 +190,9 @@
   border-top: 1px solid var(--line);
 }
 
-@media (max-width: 900px) {
+/* Keyed to the main column rather than the viewport so the grids collapse on
+   the width the content actually has, rail and browser zoom included. */
+@container app-main (max-width: 900px) {
   .overview-primary-grid,
   .overview-insights-grid {
     grid-template-columns: 1fr;
@@ -196,9 +203,9 @@
   }
 }
 
-@media (max-width: 560px) {
+@container app-main (max-width: 560px) {
   .overview-tab {
-    padding: var(--sp-4) var(--sp-3) var(--sp-6);
+    padding-block: var(--sp-4) var(--sp-6);
   }
 
   .overview-gauge-stats,

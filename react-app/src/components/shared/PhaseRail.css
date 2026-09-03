@@ -1,7 +1,19 @@
+/*
+  Sticky rather than merely tall: the rail is the app's primary orientation
+  cue, so it should survive scrolling a long report. `align-self: start` keeps
+  it from being stretched by the shell grid, which is what lets sticky apply.
+  `overflow-y: auto` covers short viewports produced by browser zoom.
+*/
 .phase-rail {
-  width: 76px;
-  flex-shrink: 0;
-  min-height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  flex: 0 0 auto;
+  width: var(--app-rail-width);
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-right: 1px solid var(--line);
   background: var(--surface);
   display: flex;
@@ -91,4 +103,9 @@
   color: var(--ink-soft);
 }
 
-@media (max-width: 760px) { .phase-rail { display: none; } }
+/* Below this the rail costs more width than the orientation is worth. The
+   token is zeroed alongside it so nothing downstream still reserves 76px. */
+@media (max-width: 760px) {
+  :root { --app-rail-width: 0px; }
+  .phase-rail { display: none; }
+}

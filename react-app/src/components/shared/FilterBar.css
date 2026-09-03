@@ -1,23 +1,50 @@
+/*
+  Sticky positioning, the translucent background and the blur now live on the
+  shared header stack (see layout.css), which is what makes the tab nav below
+  follow this bar's real height instead of a hardcoded offset. What is left
+  here is the bar's own content layout.
+*/
 .filter-bar {
-  position: sticky;
-  top: 0;
-  z-index: 6;
-  width: 100%;
-  padding: 12px max(var(--sp-4), calc((100vw - 1480px) / 2 + var(--sp-6)));
-  background: rgba(244, 246, 251, 0.94);
+  min-width: 0;
   border-bottom: 1px solid var(--line);
-  backdrop-filter: blur(18px);
 }
 
-/* single row: back link, title, filters, actions.
-   overflow is intentionally NOT set here - clipping it was what trapped
-   dropdown panels behind the tab nav below. Horizontal scrolling on very
-   narrow screens is handled per-control instead (see media query). */
-.filter-bar-row {
+/*
+  Back link + title, then the filter controls, then the actions. All three
+  groups wrap, at every width, rather than switching to a wrapped layout at a
+  breakpoint - a fixed breakpoint could not agree with the tab nav's offset,
+  and between roughly 900px and 1180px the old nowrap row simply overflowed
+  the page.
+
+  overflow is intentionally NOT set here - clipping it was what trapped
+  dropdown panels behind the tab nav below.
+*/
+.filter-bar-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  padding-block: var(--app-bar-padding-block, 12px);
+}
+
+.filter-bar-lead {
   display: flex;
   align-items: center;
   gap: 20px;
-  flex-wrap: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* `flex: 1 1 auto` lets the control cluster claim the leftover width before it
+   wraps, and `min-width: 0` lets it shrink past its content instead of pushing
+   the bar wider than the main column. */
+.filter-bar-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .filter-bar-back {
@@ -49,23 +76,29 @@
   border-right: 1px solid var(--line);
 }
 
-.filter-bar-title-block h1 {
-  font-size: 18px;
-  line-height: 1.2;
-  max-width: 220px;
+/*
+  The title is the one thing here that can be arbitrarily long, so it is also
+  the first thing allowed to give up width. `cqi` measures the main column, so
+  the budget shrinks with the space the app actually has - including when the
+  browser is zoomed - instead of stepping down at a viewport breakpoint.
+*/
+.filter-bar-title-block h1,
+.filter-bar-subtitle {
+  max-width: clamp(110px, 16cqi, 240px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.filter-bar-title-block h1 {
+  font-size: 18px;
+  line-height: 1.2;
 }
 
 .filter-bar-subtitle {
   margin-top: 2px;
   font-size: 11px;
   color: var(--muted);
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .filter-control {
@@ -146,8 +179,10 @@
   top: calc(100% + 10px);
   left: 0;
   z-index: 30;
-  min-width: 200px;
-  max-width: 300px;
+  /* Capped against the main column so a panel can never be the thing that
+     forces the page sideways on a narrow or zoomed viewport. */
+  min-width: min(200px, 100%);
+  max-width: min(300px, 70cqi);
   padding: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -247,31 +282,25 @@
   gap: 5px;
 }
 
-/* ---------- responsive: title first to shrink, then wrap to two lines ---------- */
-@media (max-width: 1180px) {
-  .filter-bar-title-block h1,
-  .filter-bar-subtitle {
-    max-width: 130px;
-  }
-}
-
-@media (max-width: 900px) {
-  .filter-bar-row {
-    flex-wrap: wrap;
-    row-gap: 10px;
-  }
+/*
+  Wrapping is handled by the flex groups above at every width, so the only
+  thing left for a media query is the vertical rules, which read as noise once
+  the groups they were separating sit on different lines.
+*/
+@container app-main (max-width: 900px) {
   .filter-bar-title-block {
     border-right: none;
     padding-right: 0;
   }
-  .filter-bar-actions {
-    margin-left: 0;
-    flex-basis: 100%;
-    justify-content: flex-end;
+
+  .filter-control-compare {
+    padding-left: 0;
+    border-left: none;
   }
 }
 
-@media (max-width: 560px) {
-  .filter-bar { padding: 10px 12px; }
-  .filter-bar-row { gap: 14px; }
+@container app-main (max-width: 560px) {
+  .filter-bar-inner {
+    gap: 10px 14px;
+  }
 }

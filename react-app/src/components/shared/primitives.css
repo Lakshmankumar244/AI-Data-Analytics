@@ -51,15 +51,22 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
-  padding: clamp(18px, 2.2vw, 28px);
+  /* cqi rather than vw so a panel breathes with the column it sits in, not
+     with a viewport width that includes the rail. */
+  padding: clamp(18px, 2.2cqi, 28px);
+  min-width: 0;
 }
 
+/* Wraps rather than switching to a column at a breakpoint, so it behaves the
+   same in a narrow window and in a zoomed-in wide one. */
 .panel-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--sp-4);
+  gap: var(--sp-2) var(--sp-4);
   margin-bottom: var(--sp-5);
+  min-width: 0;
 }
 
 .field-row {

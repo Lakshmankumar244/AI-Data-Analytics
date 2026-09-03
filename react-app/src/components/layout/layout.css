@@ -1,0 +1,217 @@
+/*
+  Application shell and layout foundation.
+
+  Two rules drive everything in this file:
+
+  1. Nothing horizontal is measured against the viewport. The PhaseRail owns a
+     column of the shell grid, so `100vw` is always wider than the space the
+     content actually has (and on Windows it also includes the scrollbar).
+     Alignment is done with `margin-inline: auto` inside the main column and
+     gutters are sized in container query units, so every bar and every screen
+     lines up on the same edges no matter how wide the rail is.
+
+  2. Sticky offsets are never numbers. The FilterBar and the TabNav are stuck
+     as one group, so the tab row follows the real height of the filter row at
+     any zoom level or wrap state instead of a hardcoded `top`.
+*/
+
+:root {
+  /* Width of the PhaseRail column. Read by the rail itself and by anything
+     that needs to reason about the main column; set to 0 when it is hidden. */
+  --app-rail-width: 76px;
+
+  /* The single content column every screen aligns to. */
+  --app-content-max: 1480px;
+
+  /* Gutter between the content column and the edge of the main area.
+     `cqi` resolves against `.app-main`, so this shrinks with the space that
+     is actually available rather than with the viewport. */
+  --app-gutter: clamp(16px, 3cqi, 40px);
+
+  /* Height reserved by the stuck header group. Not used for offsets - it only
+     feeds `scroll-margin-top` so in-page anchors clear the sticky bars. */
+  --app-header-scroll-margin: 160px;
+}
+
+/* ---------- shell ---------- */
+
+/*
+  Flex rather than a two column grid: the rail removes itself at narrow widths
+  with `display: none`, and a grid would then promote the main column into the
+  rail's `auto` track and collapse it to its padding.
+*/
+.app-shell {
+  display: flex;
+  align-items: stretch;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/*
+  `container-type: inline-size` makes this the reference for every `cqi` in the
+  app. It applies layout and inline-size containment, neither of which creates
+  a scroll container, so `position: sticky` descendants still stick to the
+  viewport.
+
+  `overflow-x: clip` is the backstop against page-level horizontal scrolling.
+  It has to be `clip` rather than `hidden`: `hidden` would turn this into a
+  scroll container and the sticky header would stick to it instead of to the
+  viewport, which pins the header in place permanently.
+*/
+/* `min-width: 0` is what lets this shrink past its content - it is the flex
+   equivalent of the grid's `minmax(0, 1fr)` and the reason a wide table
+   scrolls in its own box instead of widening the page. */
+.app-main {
+  container-type: inline-size;
+  container-name: app-main;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+/* ---------- content container ---------- */
+
+/*
+  The one horizontal alignment rule in the app. Used by the filter bar, the tab
+  bar and every screen body, which is what makes them share an edge.
+*/
+.content-container {
+  width: 100%;
+  max-width: var(--app-content-max);
+  margin-inline: auto;
+  padding-inline: var(--app-gutter);
+  min-width: 0;
+}
+
+/* Bars supply their own vertical rhythm; this variant only handles the
+   horizontal axis so it can be dropped into a padded parent. */
+.content-container-flush {
+  padding-inline: 0;
+}
+
+/* ---------- sticky header group ---------- */
+
+/*
+  FilterBar + TabNav stick together as a single element. This is the whole fix
+  for the old `top: 92px` on the tab nav: there is no second sticky element to
+  offset, so the tab row is correct whether the filter row is one line or four.
+*/
+.app-header-stack {
+  /*
+    Owned by the stack rather than by each bar so the short-viewport override
+    below reaches every bar at once. A bar that declared this on itself would
+    shadow the override.
+  */
+  --app-bar-padding-block: 12px;
+
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* Follows the theme instead of the old hardcoded light-mode rgba(). */
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--line);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .app-header-stack {
+    background: var(--paper);
+  }
+}
+
+/*
+  Short viewports are what browser zoom produces: 1280x800 at 150% is a
+  853x533 CSS viewport. Tighten the bars rather than let them eat a third of
+  the screen, and only give up on sticky when there is genuinely no room.
+*/
+@media (max-height: 640px) {
+  .app-header-stack {
+    --app-bar-padding-block: 8px;
+  }
+}
+
+@media (max-height: 420px) {
+  .app-header-stack {
+    position: static;
+  }
+}
+
+.app-header-stack-scroll-anchor {
+  scroll-margin-top: var(--app-header-scroll-margin);
+}
+
+/* ---------- page header ---------- */
+
+/*
+  Wraps instead of switching layout at a breakpoint, so it degrades the same
+  way at a narrow window and at a zoomed-in wide one.
+*/
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4) var(--sp-5);
+  margin-bottom: var(--sp-6);
+}
+
+.page-header-text {
+  flex: 1 1 min(100%, 420px);
+  min-width: 0;
+}
+
+.page-header-text h1 {
+  margin-top: var(--sp-1);
+  font-size: clamp(22px, 2.4cqi, 28px);
+}
+
+.page-header-description {
+  margin-top: var(--sp-2);
+  max-width: 72ch;
+  color: var(--ink-soft);
+}
+
+.page-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-left: auto;
+}
+
+.app-transient-state {
+  padding-block: var(--sp-6);
+}
+
+/* ---------- responsive grid ---------- */
+
+/*
+  `min()` inside `minmax()` is load-bearing: without it a track floor wider
+  than the container overflows instead of collapsing to a single column.
+*/
+.responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(var(--responsive-grid-min, 240px), 100%), 1fr)
+  );
+  gap: var(--responsive-grid-gap, var(--sp-4));
+  min-width: 0;
+}
+
+/* ---------- scrollable regions ---------- */
+
+/*
+  Tables and other wide content scroll inside their own box. Pairing this with
+  `min-width: 0` on the ancestors is what keeps the overflow local instead of
+  letting it propagate to the page.
+*/
+.scroll-region {
+  overflow-x: auto;
+  min-width: 0;
+  overscroll-behavior-x: contain;
+}

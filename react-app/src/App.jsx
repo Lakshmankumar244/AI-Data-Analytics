@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { AppProvider, useAppState, useAppDispatch } from "./state/AppContext";
 import * as api from "./data/client";
+import { AppShell as Shell, ContentContainer, MainContent } from "./components/layout";
 import PhaseRail from "./components/shared/PhaseRail";
 import ErrorState from "./components/shared/ErrorState";
 import SetupScreen from "./components/setup/SetupScreen";
@@ -75,22 +76,29 @@ function AppShell() {
   }, [dispatch]);
 
   return (
-    <div className="app-shell">
-      <PhaseRail phase={state.phase} />
-      <main className="app-main">
+    <Shell rail={<PhaseRail phase={state.phase} />}>
+      <MainContent>
         {state.phase === "setup" && <SetupScreen />}
         {state.phase === "home" && <HomeScreen />}
         {state.phase === "running" && <RunningScreen />}
         {state.phase === "report" && <ReportShell />}
-        {state.phase === "boot" && <LoadingState label="Restoring your account" />}
-        {state.phase === "error" && (
-          <ErrorState
-            message={state.errorMessage}
-            onRetry={() => dispatch({ type: "reset" })}
-          />
+        {/* The two transient states get the same content column as every
+            screen so they do not sit flush against the rail. */}
+        {state.phase === "boot" && (
+          <ContentContainer className="app-transient-state">
+            <LoadingState label="Restoring your account" />
+          </ContentContainer>
         )}
-      </main>
-    </div>
+        {state.phase === "error" && (
+          <ContentContainer className="app-transient-state">
+            <ErrorState
+              message={state.errorMessage}
+              onRetry={() => dispatch({ type: "reset" })}
+            />
+          </ContentContainer>
+        )}
+      </MainContent>
+    </Shell>
   );
 }
 

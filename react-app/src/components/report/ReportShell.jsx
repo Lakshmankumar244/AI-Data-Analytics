@@ -1,4 +1,6 @@
 import { useAppState, useActions } from "../../state/AppContext";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { ContentContainer, StickyHeaderStack } from "../layout";
 import FilterBar from "../shared/FilterBar";
 import TabNav from "../shared/TabNav";
 import ComingSoonPanel from "./ComingSoonPanel";
@@ -27,13 +29,22 @@ export default function ReportShell() {
 
   const ActiveTab = TAB_COMPONENTS[tab];
 
+  /*
+    The Tabs root spans the whole report so the tab list in the sticky header
+    and the panel below it belong to the same Radix context. Selection still
+    lives in app state - Tabs is driven by it, not the other way round.
+  */
   return (
-    <div className="report-shell">
-      <FilterBar />
-      <TabNav active={tab} onChange={setTab} />
-      <div className="report-shell-body">
-        {ActiveTab ? <ActiveTab /> : <ComingSoonPanel tabLabel="Users" />}
-      </div>
-    </div>
+    <Tabs value={tab} onValueChange={setTab} className="report-shell">
+      <StickyHeaderStack>
+        <FilterBar />
+        <TabNav />
+      </StickyHeaderStack>
+      <ContentContainer className="report-shell-body">
+        <TabsContent value={tab} className="report-shell-panel">
+          {ActiveTab ? <ActiveTab /> : <ComingSoonPanel tabLabel="Users" />}
+        </TabsContent>
+      </ContentContainer>
+    </Tabs>
   );
 }

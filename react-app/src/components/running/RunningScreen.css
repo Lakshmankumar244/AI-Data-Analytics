@@ -1,28 +1,16 @@
+/* Horizontal insetting and the max-width come from the shared content
+   container; the title block comes from PageHeader. */
 .running-screen {
-  padding: var(--sp-6) var(--sp-6) var(--sp-8);
-}
-
-.running-header {
-  margin-bottom: var(--sp-6);
-}
-
-.running-header h1 {
-  font-size: 26px;
-  margin-top: var(--sp-1);
-}
-
-.running-subhead {
-  margin-top: var(--sp-2);
-  color: var(--ink-soft);
-  font-size: 14px;
+  padding-block: var(--sp-6) var(--sp-8);
 }
 
 .running-refresh {
   margin-top: var(--sp-4);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--sp-4);
+  gap: var(--sp-3) var(--sp-4);
 }
 
 .running-status-copy {
@@ -76,10 +64,9 @@
   font-size: 13px;
 }
 
+/* Columns come from ResponsiveGrid, which drops one when the tile would get
+   too narrow instead of waiting for a viewport breakpoint. */
 .running-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-4);
   margin-bottom: var(--sp-5);
   padding-bottom: var(--sp-5);
   border-bottom: 1px solid var(--line);
@@ -173,28 +160,15 @@
   color: var(--muted);
 }
 
-@media (max-width: 720px) {
-  .running-refresh {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
+/* The dividers only read as column separators while the tiles are on one
+   line, so they come off as soon as the grid is allowed to wrap. */
+@container app-main (max-width: 720px) {
   .running-refresh > button:first-of-type {
     margin-left: 0;
-  }
-
-  .running-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .running-stats > div + div {
     padding-left: 0;
     border-left: 0;
-  }
-}
-
-@media (max-width: 480px) {
-  .running-stats {
-    grid-template-columns: 1fr;
   }
 }

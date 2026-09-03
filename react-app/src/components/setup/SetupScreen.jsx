@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAppState, useActions, useAppDispatch } from "../../state/AppContext";
 import * as api from "../../data/client";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
+import { ContentContainer, PageHeader, ResponsiveGrid } from "../layout";
 import AccessibleModulesList from "./AccessibleModulesList";
 import ConnectZohoPanel from "./ConnectZohoPanel";
 import DepthSelector from "./DepthSelector";
@@ -84,15 +85,13 @@ export default function SetupScreen() {
 
   if (!connection) {
     return (
-      <div className="setup-screen">
-        <header className="setup-header">
-          <h1>Check your data health</h1>
-          <p className="setup-subhead">
-            Connect your Zoho account to see what your login can access.
-          </p>
-        </header>
+      <ContentContainer className="setup-screen">
+        <PageHeader
+          title="Check your data health"
+          description="Connect your Zoho account to see what your login can access."
+        />
         <ConnectZohoPanel onConnect={handleConnect} connecting={connecting} notice={connectionNotice} />
-      </div>
+      </ContentContainer>
     );
   }
 
@@ -151,16 +150,15 @@ export default function SetupScreen() {
   }
 
   return (
-    <div className="setup-screen">
-      <header className="setup-header">
-        <h1>Check your data health</h1>
-        <p className="setup-subhead">
+    <ContentContainer className="setup-screen">
+      <PageHeader title="Check your data health">
+        <p className="page-header-description">
           Connected as <strong>{connection.connectedUser.name}</strong>. This scans
           only what your account can see in Zoho CRM.
         </p>
-      </header>
+      </PageHeader>
 
-      <div className="setup-grid">
+      <ResponsiveGrid min="360px" gap="var(--sp-5)" className="setup-grid">
         <section className="panel">
           <AccessibleModulesList
             modules={connection.accessibleModules}
@@ -185,7 +183,7 @@ export default function SetupScreen() {
         <section className="panel">
           <CostEstimate estimate={estimate} loading={estimating} />
         </section>
-      </div>
+      </ResponsiveGrid>
 
       <div className="setup-actions">
         {scanHistory.length > 0 && (
@@ -207,6 +205,6 @@ export default function SetupScreen() {
           {starting ? "Starting\u2026" : "Run scan"}
         </button>
       </div>
-    </div>
+    </ContentContainer>
   );
 }

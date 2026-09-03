@@ -1,8 +1,9 @@
 .score-gauge {
   display: flex;
   align-items: center;
-  gap: clamp(22px, 4vw, 48px);
+  gap: clamp(22px, 4cqi, 48px);
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .score-gauge-ring-wrap {
@@ -60,7 +61,9 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
-  min-width: 220px;
+  /* A hard 220px floor is what turns a narrow column into a page-wide
+     scrollbar; capping it at the available width lets the flex row wrap. */
+  min-width: min(220px, 100%);
 }
 
 .score-gauge-delta {

@@ -1,4 +1,5 @@
-.modules-tab { display: flex; flex-direction: column; gap: 18px; padding: 24px clamp(16px,3vw,40px) 48px; }
+/* Horizontal insetting comes from the shared content container. */
+.modules-tab { display: flex; flex-direction: column; gap: 18px; padding-block: 24px 48px; min-width: 0; }
 .modules-panel .panel-header { align-items: flex-start; flex-wrap: wrap; gap: 16px; }
 .modules-panel h1 { font-size: clamp(20px,2vw,26px); margin-top: 3px; }
 .modules-floor-note { font-size: 11px; color: var(--muted); max-width: 340px; text-align: right; }
@@ -11,4 +12,4 @@
 .module-recommendations { margin-top: 22px; padding: 18px; border: 1px solid #f0dfbb; border-radius: 12px; background: #fffbf2; }
 .module-recommendations ul { margin: 8px 0 0; padding-left: 18px; color: var(--ink-soft); font-size: 12px; }
 .module-recommendations li + li { margin-top: 6px; }
-@media (max-width: 720px) { .modules-tab { padding: 16px 12px 32px; } .modules-floor-note { text-align: left; } }
+@container app-main (max-width: 720px) { .modules-tab { padding-block: 16px 32px; } .modules-floor-note { text-align: left; } }

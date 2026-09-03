@@ -1,4 +1,5 @@
-.trend-tab { padding: 24px clamp(16px,3vw,40px) 48px; }
+/* Horizontal insetting comes from the shared content container. */
+.trend-tab { padding-block: 24px 48px; min-width: 0; }
 .trend-tab h1 { font-size: clamp(20px,2vw,26px); margin-top: 3px; }
 .trend-summary { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: var(--surface-sunken); font-size: 12px; color: var(--ink-soft); }
 .trend-up { color: var(--strong); font-weight: 700; }
@@ -21,4 +22,4 @@
 .trend-note { margin: 12px 0 0; }
 .trend-state { padding: 40px; text-align: center; }
 .trend-state h1 { margin: 6px 0 8px; }
-@media (max-width: 640px) { .trend-tab { padding: 16px 12px 32px; } .trend-metrics { grid-template-columns: 1fr; } .trend-criteria { display:none; } }
+@container app-main (max-width: 640px) { .trend-tab { padding-block: 16px 32px; } .trend-metrics { grid-template-columns: 1fr; } .trend-criteria { display:none; } }

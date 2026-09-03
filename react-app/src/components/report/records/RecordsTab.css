@@ -1,4 +1,5 @@
-.records-tab { padding: 24px clamp(16px,3vw,40px) 48px; }
+/* Horizontal insetting comes from the shared content container. */
+.records-tab { padding-block: 24px 48px; min-width: 0; }
 .records-tab h1 { font-size: clamp(20px,2vw,26px); margin-top: 3px; }
 .records-header-count, .fix-header-count { display:flex; flex-direction:column; align-items:flex-end; }
 .records-header-count strong, .fix-header-count strong { font-size: 22px; letter-spacing:-.04em; }
@@ -25,4 +26,4 @@
 .records-pagination { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:16px; }
 .records-pagination-count, .records-pagination-page { font-size:12px; color:var(--muted); }
 .records-pagination-controls { display:flex; align-items:center; gap:9px; }
-@media (max-width:640px) { .records-tab { padding:16px 12px 32px; } .records-pagination { align-items:flex-start; flex-direction:column; } }
+@container app-main (max-width:640px) { .records-tab { padding-block:16px 32px; } .records-pagination { align-items:flex-start; flex-direction:column; } }

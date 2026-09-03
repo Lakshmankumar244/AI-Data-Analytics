@@ -1,4 +1,5 @@
-.users-tab { padding: 24px clamp(16px, 3vw, 40px) 48px; }
+/* Horizontal insetting comes from the shared content container. */
+.users-tab { padding-block: 24px 48px; min-width: 0; }
 .users-tab h1 { font-size: clamp(20px, 2vw, 26px); margin-top: 3px; }
 .users-disclosure, .users-empty p:not(.eyebrow) { color: var(--ink-soft); font-size: 12px; }
 .users-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 22px 0; }
@@ -18,4 +19,4 @@
 .users-overall { color: var(--brand-strong); font-weight: 750; }
 .users-empty { padding: 40px; text-align: center; }
 .users-empty h1 { margin: 6px 0 8px; }
-@media (max-width: 640px) { .users-tab { padding: 16px 12px 32px; } .users-summary { grid-template-columns: 1fr; } }
+@container app-main (max-width: 640px) { .users-tab { padding-block: 16px 32px; } .users-summary { grid-template-columns: 1fr; } }

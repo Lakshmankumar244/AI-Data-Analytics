@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppState, useAppDispatch } from "../../state/AppContext";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
 import useScanAnalytics from "../../hooks/useScanAnalytics";
+import { ContentContainer, PageHeader, ResponsiveGrid } from "../layout";
 import ModuleProgressList from "./ModuleProgressList";
 import "./RunningScreen.css";
 
@@ -202,15 +203,12 @@ export default function RunningScreen() {
       .filter(Boolean)
       .join(", ");
     return (
-      <div className="running-screen">
-        <header className="running-header">
-          <p className="eyebrow">Scan complete</p>
-          <h1>No records matched this scan</h1>
-          <p className="running-subhead">
-            Zoho returned no {moduleNames || "CRM"} records for the selected
-            date range and activity clock. Nothing failed and no records were changed.
-          </p>
-        </header>
+      <ContentContainer className="running-screen">
+        <PageHeader
+          eyebrow="Scan complete"
+          title="No records matched this scan"
+          description={`Zoho returned no ${moduleNames || "CRM"} records for the selected date range and activity clock. Nothing failed and no records were changed.`}
+        />
 
         <section className="panel running-empty" aria-labelledby="empty-scan-title">
           <h2 id="empty-scan-title">Try a broader scope</h2>
@@ -226,18 +224,17 @@ export default function RunningScreen() {
             Change scan filters
           </button>
         </section>
-      </div>
+      </ContentContainer>
     );
   }
 
   return (
-    <div className="running-screen">
-      <header className="running-header">
-        <p className="eyebrow">{allDone ? "Wrapping up" : "Scanning"}</p>
-        <h1>{allDone ? "Putting your report together\u2026" : "Reading your records\u2026"}</h1>
-        <p className="running-subhead">
-          Read-only the whole way through. Nothing in your CRM is being changed.
-        </p>
+    <ContentContainer className="running-screen">
+      <PageHeader
+        eyebrow={allDone ? "Wrapping up" : "Scanning"}
+        title={allDone ? "Putting your report together\u2026" : "Reading your records\u2026"}
+        description="Read-only the whole way through. Nothing in your CRM is being changed."
+      >
         <div className="running-refresh">
           <div className="running-status-copy">
             <span className="eyebrow">Reading backend status</span>
@@ -268,10 +265,10 @@ export default function RunningScreen() {
           {visibleAutomationMessage}
         </p>
         {error && <p className="running-error" role="alert">{error}</p>}
-      </header>
+      </PageHeader>
 
       <div className="panel">
-        <div className="running-stats" aria-label="Live scan progress">
+        <ResponsiveGrid min="150px" className="running-stats" aria-label="Live scan progress">
           <div>
             <strong className="mono">{recordsExtracted.toLocaleString("en-IN")}</strong>
             <span>Records extracted</span>
@@ -292,7 +289,7 @@ export default function RunningScreen() {
             </strong>
             <span>Throttle retries</span>
           </div>
-        </div>
+        </ResponsiveGrid>
         <ModuleProgressList
           modules={scopedModules}
           progress={progress}
@@ -300,6 +297,6 @@ export default function RunningScreen() {
           activeModule={activeModule}
         />
       </div>
-    </div>
+    </ContentContainer>
   );
 }

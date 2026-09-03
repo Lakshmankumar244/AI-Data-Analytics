@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppState, useActions } from "../../state/AppContext";
 import { formatNumber } from "../../utils/format";
+import { ContentContainer } from "../layout";
 import "./FilterBar.css";
 
 const RANGE_LABELS = { "30d": "Last 30 days", "90d": "Last 90 days", "180d": "Last 6 months", all: "All time" };
@@ -138,98 +139,106 @@ export default function FilterBar() {
 
   return (
     <header className="filter-bar">
-      <div className="filter-bar-row">
-        <button type="button" className="filter-bar-back" onClick={showHome}>
-          <span aria-hidden="true">←</span> Reports
-        </button>
+      {/* Three wrapping groups rather than one long nowrap row. Each group
+          stays intact and drops to its own line when the bar runs out of
+          width, so the filters stay usable instead of overflowing the page
+          at the mid widths a zoomed-in laptop produces. */}
+      <ContentContainer className="filter-bar-inner">
+        <div className="filter-bar-lead">
+          <button type="button" className="filter-bar-back" onClick={showHome}>
+            <span aria-hidden="true">←</span> Reports
+          </button>
 
-        <div className="filter-bar-title-block">
-          <h1>{displayedModules.map((module) => module.label).join(" + ") || "Analytics"}</h1>
-          {accountLabel && (
-            <p className="filter-bar-subtitle" title={accountLabel}>
-              {accountLabel} · {depthLabel} scan
-            </p>
-          )}
-        </div>
-
-        <div className="filter-control">
-          <span className="eyebrow">Period</span>
-          <span className="filter-control-value mono">{rangeLabel}</span>
-        </div>
-
-        <FilterDropdown
-          label="Modules"
-          valueLabel={
-            filterModules.length === 0 || filterModules.length === scannedModules.length
-              ? `All ${scannedModules.length}`
-              : displayedModules.map((m) => m.label).join(", ")
-          }
-          isOpen={openMenu === "modules"}
-          onToggle={() => setOpenMenu(openMenu === "modules" ? null : "modules")}
-          onClose={() => setOpenMenu(null)}
-        >
-          <div className="filter-dropdown-options" aria-label="Filter report modules">
-            {scannedModules.map((module) => {
-              const isActive = filterModules.length === 0 || filterModules.includes(module.apiName);
-              return (
-                <button
-                  key={module.apiName}
-                  type="button"
-                  className="filter-dropdown-option filter-dropdown-option-checkbox"
-                  aria-pressed={isActive}
-                  onClick={() => toggleModule(module.apiName)}
-                >
-                  <span className="filter-dropdown-checkbox" aria-hidden="true" />
-                  {module.label}
-                </button>
-              );
-            })}
+          <div className="filter-bar-title-block">
+            <h1>{displayedModules.map((module) => module.label).join(" + ") || "Analytics"}</h1>
+            {accountLabel && (
+              <p className="filter-bar-subtitle" title={accountLabel}>
+                {accountLabel} · {depthLabel} scan
+              </p>
+            )}
           </div>
-        </FilterDropdown>
+        </div>
 
-        {/* Hidden on the Users tab on purpose - filtering "by user" while
-            already viewing the per-user breakdown is redundant there. */}
-        {tab !== "users" && (
+        <div className="filter-bar-controls">
+          <div className="filter-control">
+            <span className="eyebrow">Period</span>
+            <span className="filter-control-value mono">{rangeLabel}</span>
+          </div>
+
           <FilterDropdown
-            label="Users"
-            valueLabel={formatNumber(null) /* "—" - no user data loaded here yet, don't imply a fake count */}
-            isOpen={false}
-            onToggle={() => {}}
-            onClose={() => {}}
-            disabled
+            label="Modules"
+            valueLabel={
+              filterModules.length === 0 || filterModules.length === scannedModules.length
+                ? `All ${scannedModules.length}`
+                : displayedModules.map((m) => m.label).join(", ")
+            }
+            isOpen={openMenu === "modules"}
+            onToggle={() => setOpenMenu(openMenu === "modules" ? null : "modules")}
+            onClose={() => setOpenMenu(null)}
           >
-            {/* No user list is loaded into this component today - there is
-                nothing real to show here yet, so this stays visibly inert
-                (dimmed, "Not enabled yet" tooltip) rather than faking
-                selectable options. TODO: wire once user data is available. */}
+            <div className="filter-dropdown-options" aria-label="Filter report modules">
+              {scannedModules.map((module) => {
+                const isActive = filterModules.length === 0 || filterModules.includes(module.apiName);
+                return (
+                  <button
+                    key={module.apiName}
+                    type="button"
+                    className="filter-dropdown-option filter-dropdown-option-checkbox"
+                    aria-pressed={isActive}
+                    onClick={() => toggleModule(module.apiName)}
+                  >
+                    <span className="filter-dropdown-checkbox" aria-hidden="true" />
+                    {module.label}
+                  </button>
+                );
+              })}
+            </div>
           </FilterDropdown>
-        )}
 
-        <FilterDropdown
-          label="Attribution"
-          valueLabel={clockLabel}
-          isOpen={openMenu === "attribution"}
-          onToggle={() => setOpenMenu(openMenu === "attribution" ? null : "attribution")}
-          onClose={() => setOpenMenu(null)}
-        >
-          <div className="filter-dropdown-options">
-            {CLOCK_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className="filter-dropdown-option"
-                aria-pressed={scanConfig.clock === option.id}
-                onClick={() => setAttribution(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
+          {/* Hidden on the Users tab on purpose - filtering "by user" while
+              already viewing the per-user breakdown is redundant there. */}
+          {tab !== "users" && (
+            <FilterDropdown
+              label="Users"
+              valueLabel={formatNumber(null) /* "—" - no user data loaded here yet, don't imply a fake count */}
+              isOpen={false}
+              onToggle={() => {}}
+              onClose={() => {}}
+              disabled
+            >
+              {/* No user list is loaded into this component today - there is
+                  nothing real to show here yet, so this stays visibly inert
+                  (dimmed, "Not enabled yet" tooltip) rather than faking
+                  selectable options. TODO: wire once user data is available. */}
+            </FilterDropdown>
+          )}
+
+          <FilterDropdown
+            label="Attribution"
+            valueLabel={clockLabel}
+            isOpen={openMenu === "attribution"}
+            onToggle={() => setOpenMenu(openMenu === "attribution" ? null : "attribution")}
+            onClose={() => setOpenMenu(null)}
+          >
+            <div className="filter-dropdown-options">
+              {CLOCK_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="filter-dropdown-option"
+                  aria-pressed={scanConfig.clock === option.id}
+                  onClick={() => setAttribution(option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </FilterDropdown>
+
+          <div className="filter-control filter-control-compare">
+            <span className="eyebrow">Compare</span>
+            <span className="filter-control-value filter-control-strong">{compareLabel}</span>
           </div>
-        </FilterDropdown>
-
-        <div className="filter-control filter-control-compare">
-          <span className="eyebrow">Compare</span>
-          <span className="filter-control-value filter-control-strong">{compareLabel}</span>
         </div>
 
         <div className="filter-bar-actions">
@@ -240,7 +249,7 @@ export default function FilterBar() {
             Export <ChevronIcon />
           </button>
         </div>
-      </div>
+      </ContentContainer>
     </header>
   );
 }
