@@ -1,70 +1,31 @@
-# Getting Started with Create React App
+# CRM Data Health Scanner — React client
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Standalone React frontend, built with [Vite](https://vite.dev/).
 
 ## Available Scripts
 
-In the project directory, you can run:
+### `npm run dev` (alias: `npm start`)
 
-### `yarn start`
+Runs the app in development mode on [http://localhost:3000/app/](http://localhost:3000/app/).
+The `/app/` prefix matches the path Catalyst hosts the client under, so relative
+asset URLs behave the same in development and production.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+### `npm run build`
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+Builds the app for production into the `build` folder. The output is the
+Catalyst deploy artifact: hashed JS/CSS bundles, the contents of `public/`, and
+a copy of `client-package.json`.
 
-### `yarn test`
+### `npm run preview`
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Serves the contents of `build` locally for a quick check of a production build.
 
-### `yarn build`
+## Catalyst
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+`catalyst.json` points the client resource at `react-app/build` and runs
+`npm run build` as its pre-deploy and pre-serve script, so `catalyst deploy` and
+`catalyst serve` build the frontend before packaging it.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `yarn eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
-
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
-
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `yarn build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+`client-package.json` stays at the package root. It is Catalyst deploy
+configuration — it sets the hosted homepage to `/__catalyst/auth/login` and the
+post-login redirect to `index.html` — and is copied into `build` by the build.

@@ -8,7 +8,10 @@
     "source": "functions"
   },
   "client": {
-    "source": "react-app",
-    "plugin": "zcatalyst-cli-plugin-react"
+    "source": "react-app/build",
+    "scripts": {
+      "preserve": "npm --prefix .. run build",
+      "predeploy": "npm --prefix .. run build"
+    }
   }
 }
