@@ -1,5 +1,8 @@
 import { useMemo } from "react";
 import { useAppState } from "../../../state/AppContext";
+import UsersPageHeader from "./UsersPageHeader";
+import UsersSummary from "./UsersSummary";
+import UserQualityTable from "./UserQualityTable";
 import "./UsersTab.css";
 
 const DOMAIN_WEIGHTS = { completeness: 20, validity: 15 };
@@ -86,9 +89,10 @@ export default function UsersTab() {
   if (!owners.length) {
     return (
       <div className="users-tab">
+        <UsersPageHeader />
         <section className="panel users-empty">
-          <p className="eyebrow">Ownership quality</p>
-          <h1>User analytics were not measured in this scan</h1>
+          <p className="eyebrow">Owner investigation</p>
+          <h2>User analytics were not measured in this scan</h2>
           <p>
             Owner-level aggregates will appear for scans processed after this
             feature was deployed. Older reports remain available without them.
@@ -105,52 +109,13 @@ export default function UsersTab() {
 
   return (
     <div className="users-tab">
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Ownership quality</p>
-            <h1>Quality by CRM owner</h1>
-          </div>
-          <p className="users-disclosure">
-            Aggregate counts only. No CRM records are displayed.
-          </p>
-        </div>
-
-        <div className="users-summary">
-          <div><span>Owners</span><strong>{owners.length.toLocaleString("en-IN")}</strong></div>
-          <div><span>Records</span><strong>{recordCount.toLocaleString("en-IN")}</strong></div>
-          <div><span>Unassigned</span><strong>{unassignedCount.toLocaleString("en-IN")}</strong></div>
-        </div>
-
-        <div className="users-table-wrap">
-          <table className="users-table">
-            <thead>
-              <tr>
-                <th>Owner</th>
-                <th>Modules</th>
-                <th>Records</th>
-                <th>Completeness</th>
-                <th>Validity</th>
-                <th>Overall</th>
-              </tr>
-            </thead>
-            <tbody>
-              {owners.map((owner) => (
-                <tr key={owner.ownerKey}>
-                  <td>
-                    <strong>{owner.ownerName}</strong>
-                  </td>
-                  <td>{owner.modules.join(", ")}</td>
-                  <td className="mono">{owner.recordCount.toLocaleString("en-IN")}</td>
-                  <td className="mono">{owner.completeness ?? "N/A"}</td>
-                  <td className="mono">{owner.validity ?? "N/A"}</td>
-                  <td className="mono users-overall">{owner.overall ?? "N/A"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <UsersPageHeader />
+      <UsersSummary
+        ownerCount={owners.length}
+        recordCount={recordCount}
+        unassignedCount={unassignedCount}
+      />
+      <UserQualityTable owners={owners} />
     </div>
   );
 }
