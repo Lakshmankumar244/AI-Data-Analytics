@@ -12,9 +12,6 @@ import CostEstimate from "./CostEstimate";
 import LoadingState from "../shared/LoadingState";
 import "./SetupScreen.css";
 
-const ZOHO_CONSENT_URL =
-  "https://ai-data-analytics-60083091023.development.catalystserverless.in/server/ai_data_analytics_function/api/zoho/consent";
-
 export default function SetupScreen() {
   const { connection, scanConfig, connectionNotice, scanHistory } = useAppState();
   const { setScanConfig } = useActions();
@@ -56,7 +53,7 @@ export default function SetupScreen() {
 
   useEffect(() => {
     if (connecting) {
-      window.location.assign(ZOHO_CONSENT_URL);
+      window.location.assign(api.ZOHO_CONSENT_URL);
     }
   }, [connecting]);
 

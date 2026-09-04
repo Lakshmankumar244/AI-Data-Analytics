@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppState } from "../../state/AppContext";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
-import { activateConnection, getScanHistory, getScanResults } from "../../data/client";
+import { activateConnection, getScanHistory, getScanResults, ZOHO_CONSENT_URL } from "../../data/client";
 import { formatNumber } from "../../utils/format";
 import { ContentContainer, PageHeader } from "../layout";
 import Band from "../shared/Band";
 import Dropdown from "../shared/Dropdown";
 import "./HomeScreen.css";
-
-const ZOHO_CONSENT_URL =
-  "https://ai-data-analytics-60083091023.development.catalystserverless.in/server/ai_data_analytics_function/api/zoho/consent";
 
 const COMPLETED_BAND = {
   id: "completed",

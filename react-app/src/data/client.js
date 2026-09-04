@@ -2,11 +2,12 @@
 // received a real backend implementation remain explicitly exported from
 // mockClient.js at the bottom of this file.
 
-const FUNCTION_BASE_URL =
-  "https://ai-data-analytics-60083091023.development.catalystserverless.in/server/ai_data_analytics_function";
-// TODO: replace <name> with your actual project domain. Move to
-// process.env.REACT_APP_ZOHO_FUNCTION_URL later - hardcoded for now while
-// still actively debugging (same reasoning as the consent redirect earlier).
+// Same-origin Catalyst function path. catalyst serve and hosted Catalyst both
+// expose Advanced I/O functions at /server/<function_name>, so this works
+// locally and when deployed without baking in a remote development domain.
+const FUNCTION_BASE_URL = "/server/ai_data_analytics_function";
+
+export const ZOHO_CONSENT_URL = `${FUNCTION_BASE_URL}/api/zoho/consent`;
 
 export async function getConnection() {
   const res = await fetch(`${FUNCTION_BASE_URL}/api/zoho/connection`, {
