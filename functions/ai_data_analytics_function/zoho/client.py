@@ -148,6 +148,101 @@ def has_modified_records_since(
     return bool(response.json().get("data"))
 
 
+RECORD_NAME_FIELDS = (
+    "Deal_Name",
+    "Account_Name",
+    "Full_Name",
+    "First_Name",
+    "Last_Name",
+    "Company",
+    "Name",
+)
+MODULE_NAME_FIELDS = {
+    "Deals": ("Deal_Name",),
+    "Accounts": ("Account_Name",),
+    "Leads": ("Full_Name", "First_Name", "Last_Name", "Company"),
+    "Contacts": ("Full_Name", "First_Name", "Last_Name"),
+}
+
+
+def _crm_display_name(record: dict) -> str:
+    for field_name in ("Deal_Name", "Account_Name", "Full_Name"):
+        value = str(record.get(field_name) or "").strip()
+        if value:
+            return value
+    person = " ".join(
+        part
+        for part in (
+            str(record.get("First_Name") or "").strip(),
+            str(record.get("Last_Name") or "").strip(),
+        )
+        if part
+    )
+    if person:
+        return person
+    for field_name in ("Company", "Name"):
+        value = str(record.get(field_name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def fetch_record_names(
+    access_token: str,
+    api_domain: str,
+    module_api_name: str,
+    record_ids: list,
+) -> dict:
+    """Resolve Deal / Account / Lead names for stored CRM record ids."""
+    ids = []
+    seen = set()
+    for record_id in record_ids:
+        candidate = str(record_id or "").strip()
+        if candidate.isdigit() and candidate not in seen:
+            seen.add(candidate)
+            ids.append(candidate)
+    if not ids or not module_api_name:
+        return {}
+
+    field_sets = [
+        MODULE_NAME_FIELDS.get(module_api_name, ("Name",)),
+        ("Name",),
+        RECORD_NAME_FIELDS,
+    ]
+    names = {}
+    for start in range(0, len(ids), 100):
+        chunk = ids[start : start + 100]
+        records = []
+        for fields in field_sets:
+            try:
+                response = requests.get(
+                    f"{api_domain}/crm/v6/{module_api_name}",
+                    params={
+                        "ids": ",".join(chunk),
+                        "fields": ",".join(fields),
+                        "per_page": min(len(chunk), 100),
+                    },
+                    headers={"Authorization": f"Zoho-oauthtoken {access_token}"},
+                    timeout=20,
+                )
+                response.raise_for_status()
+                records = response.json().get("data") or []
+                break
+            except (requests.RequestException, ValueError, TypeError) as exc:
+                logger.warning(
+                    "Could not read %s record names with fields %s: %s",
+                    module_api_name,
+                    ",".join(fields),
+                    exc,
+                )
+        for record in records:
+            record_id = str(record.get("id") or "").strip()
+            name = _crm_display_name(record)
+            if record_id and name:
+                names[record_id] = name
+    return names
+
+
 def fetch_accessible_modules(access_token: str, api_domain: str = None) -> list:
     api_domain = api_domain or os.environ["ZOHO_API_DOMAIN"]
     resp = requests.get(

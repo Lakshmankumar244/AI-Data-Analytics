@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { useAppState, useActions } from "../../state/AppContext";
 import { formatNumber, formatReportPeriod } from "../../utils/format";
+import { exportVisibleTables } from "../../utils/exportTable";
+import { groupOwnerAnalytics } from "../../data/ownerAnalytics";
 import { ContentContainer } from "../layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,10 +19,6 @@ import "./FilterBar.css";
 
 const RANGE_LABELS = { "30d": "Last 30 days", "90d": "Last 90 days", "180d": "Last 6 months", all: "All time" };
 const CLOCK_LABELS = { created: "Created date", modified: "Modified date" };
-const CLOCK_OPTIONS = [
-  { id: "created", label: "Created date" },
-  { id: "modified", label: "Modified date" },
-];
 
 // Compare should mirror the ACTUAL selected period length, not a fixed
 // guess. Prefer the real date range from reportContext (fromUtc/toUtc)
@@ -76,7 +74,7 @@ function FilterDropdown({ label, valueLabel, isOpen, onToggle, onClose, disabled
         className={`filter-dropdown-trigger${disabled ? " filter-dropdown-trigger-disabled" : ""}`}
         aria-expanded={isOpen}
         aria-disabled={disabled}
-        title={disabled ? "Not enabled yet" : undefined}
+        title={disabled ? "User analytics were not measured in this scan" : undefined}
         onClick={() => !disabled && onToggle()}
       >
         <span className="filter-control-value">{valueLabel}</span>
@@ -88,7 +86,7 @@ function FilterDropdown({ label, valueLabel, isOpen, onToggle, onClose, disabled
 }
 
 function useReportFilters() {
-  const { connection, scan, scanConfig, filterModules, tab } = useAppState();
+  const { connection, scan, scanConfig, filterModules, filterUsers } = useAppState();
   const { setFilter } = useActions();
   const [openMenu, setOpenMenu] = useState(null);
 
@@ -124,11 +122,20 @@ function useReportFilters() {
     filterModules.length === 0 || filterModules.length === scannedModules.length
       ? `All ${scannedModules.length}`
       : displayedModules.map((module) => module.label).join(", ");
+  const scannedUsers = groupOwnerAnalytics(scan?.moduleAnalytics ?? [], filterModules);
+  const displayedUsers = filterUsers.length
+    ? scannedUsers.filter((owner) => filterUsers.includes(owner.ownerKey))
+    : scannedUsers;
+  const usersEnabled = scannedUsers.length > 0;
+  const usersValueLabel = !usersEnabled
+    ? formatNumber(null)
+    : filterUsers.length === 0 || filterUsers.length === scannedUsers.length
+      ? `All ${scannedUsers.length}`
+      : displayedUsers.map((owner) => owner.ownerName).join(", ");
 
   const compareDays = periodLengthDays(scan, scanConfig);
   const compareLabel = compareDays ? `Prior ${compareDays} day${compareDays === 1 ? "" : "s"}` : "Prior period";
-  const showUsers = tab !== "users";
-  const filterCount = 4 + (showUsers ? 1 : 0);
+  const filterCount = 5;
 
   function toggleModule(apiName) {
     const set = new Set(filterModules);
@@ -136,9 +143,10 @@ function useReportFilters() {
     setFilter({ filterModules: Array.from(set) });
   }
 
-  function setAttribution(clockId) {
-    setFilter({ scanConfig: { ...scanConfig, clock: clockId } });
-    setOpenMenu(null);
+  function toggleUser(ownerKey) {
+    const set = new Set(filterUsers);
+    set.has(ownerKey) ? set.delete(ownerKey) : set.add(ownerKey);
+    setFilter({ filterUsers: Array.from(set) });
   }
 
   return {
@@ -152,13 +160,16 @@ function useReportFilters() {
     scannedModules,
     displayedModules,
     modulesValueLabel,
+    scannedUsers,
+    usersEnabled,
+    usersValueLabel,
     compareLabel,
-    showUsers,
+    showUsers: true,
     filterCount,
     filterModules,
-    scanConfig,
+    filterUsers,
     toggleModule,
-    setAttribution,
+    toggleUser,
   };
 }
 
@@ -184,20 +195,24 @@ function ModuleOptions({ scannedModules, filterModules, toggleModule }) {
   );
 }
 
-function AttributionOptions({ scanConfig, setAttribution }) {
+function UserOptions({ scannedUsers, filterUsers, toggleUser }) {
   return (
-    <div className="filter-dropdown-options">
-      {CLOCK_OPTIONS.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          className="filter-dropdown-option"
-          aria-pressed={scanConfig.clock === option.id}
-          onClick={() => setAttribution(option.id)}
-        >
-          {option.label}
-        </button>
-      ))}
+    <div className="filter-dropdown-options" aria-label="Filter report users">
+      {scannedUsers.map((owner) => {
+        const isActive = filterUsers.length === 0 || filterUsers.includes(owner.ownerKey);
+        return (
+          <button
+            key={owner.ownerKey}
+            type="button"
+            className="filter-dropdown-option filter-dropdown-option-checkbox"
+            aria-pressed={isActive}
+            onClick={() => toggleUser(owner.ownerKey)}
+          >
+            <span className="filter-dropdown-checkbox" aria-hidden="true" />
+            {owner.ownerName}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -207,6 +222,8 @@ function FilterCommand({
   rangeLabel,
   rangeLabelCompact,
   modulesValueLabel,
+  usersValueLabel,
+  usersEnabled,
   clockLabel,
   compareLabel,
   showUsers,
@@ -215,8 +232,9 @@ function FilterCommand({
   scannedModules,
   filterModules,
   toggleModule,
-  scanConfig,
-  setAttribution,
+  scannedUsers,
+  filterUsers,
+  toggleUser,
 }) {
   const isSheet = variant === "sheet";
 
@@ -264,40 +282,46 @@ function FilterCommand({
         isSheet ? (
           <div className="filter-control filter-control-stack">
             <span className="eyebrow">Users</span>
-            <span className="filter-control-value filter-control-placeholder">
-              {formatNumber(null)}
-            </span>
-            <p className="filter-sheet-note">User filtering is not enabled yet.</p>
+            <span className="filter-control-value">{usersValueLabel}</span>
+            {usersEnabled ? (
+              <UserOptions
+                scannedUsers={scannedUsers}
+                filterUsers={filterUsers}
+                toggleUser={toggleUser}
+              />
+            ) : (
+              <p className="filter-sheet-note">
+                User analytics were not measured in this scan.
+              </p>
+            )}
           </div>
         ) : (
           <FilterDropdown
             label="Users"
-            valueLabel={formatNumber(null)}
-            isOpen={false}
-            onToggle={() => {}}
-            onClose={() => {}}
-            disabled
-          />
+            valueLabel={usersValueLabel}
+            isOpen={openMenu === "users"}
+            onToggle={() => setOpenMenu(openMenu === "users" ? null : "users")}
+            onClose={() => setOpenMenu(null)}
+            disabled={!usersEnabled}
+          >
+            <UserOptions
+              scannedUsers={scannedUsers}
+              filterUsers={filterUsers}
+              toggleUser={toggleUser}
+            />
+          </FilterDropdown>
         )
       )}
 
-      {isSheet ? (
-        <div className="filter-control filter-control-stack">
-          <span className="eyebrow">Attribution</span>
-          <span className="filter-control-value">{clockLabel}</span>
-          <AttributionOptions scanConfig={scanConfig} setAttribution={setAttribution} />
-        </div>
-      ) : (
-        <FilterDropdown
-          label="Attribution"
-          valueLabel={clockLabel}
-          isOpen={openMenu === "attribution"}
-          onToggle={() => setOpenMenu(openMenu === "attribution" ? null : "attribution")}
-          onClose={() => setOpenMenu(null)}
+      <div className="filter-control filter-control-compare">
+        <span className="eyebrow">Attribution</span>
+        <span
+          className="filter-control-value filter-control-strong"
+          title="Attribution is set when the scan starts. Start a new scan to change created vs modified date."
         >
-          <AttributionOptions scanConfig={scanConfig} setAttribution={setAttribution} />
-        </FilterDropdown>
-      )}
+          {clockLabel}
+        </span>
+      </div>
 
       <div className="filter-control filter-control-compare">
         <span className="eyebrow">Compare</span>
@@ -309,6 +333,7 @@ function FilterCommand({
 
 export default function FilterBar() {
   const { showHome } = useActions();
+  const { tab } = useAppState();
   const filters = useReportFilters();
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -317,7 +342,8 @@ export default function FilterBar() {
   }
 
   function handleExport() {
-    console.log("Export: not yet implemented");
+    const root = document.querySelector("[data-export-root]") || document.querySelector(".report-shell-panel");
+    exportVisibleTables(root, `crm-data-health-${tab || "report"}`);
   }
 
   return (

@@ -1,6 +1,6 @@
 /* Horizontal insetting comes from the shared content container. */
 .trend-tab { padding-block: 24px 48px; min-width: 0; }
-.trend-tab h1 { font-size: clamp(20px,2vw,26px); margin-top: 3px; }
+.trend-tab .panel-header { align-items: flex-start; }
 .trend-summary { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: var(--surface-sunken); font-size: 12px; color: var(--ink-soft); }
 .trend-up { color: var(--strong); font-weight: 700; }
 .trend-down { color: var(--risk); font-weight: 700; }

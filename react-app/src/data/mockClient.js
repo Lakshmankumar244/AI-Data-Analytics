@@ -119,6 +119,18 @@ export async function getRecords(_scanId, filters = {}, page = 1) {
   if (filters.modules && filters.modules.length > 0) {
     filtered = filtered.filter((r) => filters.modules.includes(r.module));
   }
+  if (filters.owners && filters.owners.length > 0) {
+    filtered = filtered.filter((r) => filters.owners.includes(r.ownerKey) || filters.owners.includes(r.ownerName));
+  }
+  if (filters.q) {
+    const needle = String(filters.q).toLowerCase();
+    filtered = filtered.filter((record) =>
+      [record.recordName, record.recordRef, record.module, record.reason, record.ownerName]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle)
+    );
+  }
 
   const total = filtered.length;
   const start = (page - 1) * PAGE_SIZE;

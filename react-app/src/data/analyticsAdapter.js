@@ -259,21 +259,103 @@ function aggregateAnalytics(modules = []) {
   };
 }
 
+const EMPTY_STATE_COUNTS = {
+  proper: 0,
+  incomplete: 0,
+  inaccurate: 0,
+  suspicious: 0,
+  suspected_duplicate: 0,
+  confirmed_duplicate: 0,
+};
+
+function moduleRecordCount(module) {
+  return (
+    Number(module.metrics?.summary?.data?.recordCount) ||
+    Number(module.sourceRecordCount) ||
+    0
+  );
+}
+
+function moduleStateCounts(module) {
+  const findings = module.metrics?.record_findings?.data;
+  if (!findings?.measured) return null;
+  const stored = findings.stateCounts;
+  if (stored && Number.isFinite(Number(stored.proper))) {
+    return {
+      proper: Number(stored.proper) || 0,
+      incomplete: Number(stored.incomplete) || 0,
+      inaccurate: Number(stored.inaccurate) || 0,
+      suspicious: Number(stored.suspicious) || 0,
+      suspected_duplicate: Number(stored.suspected_duplicate) || 0,
+      confirmed_duplicate: Number(stored.confirmed_duplicate) || 0,
+    };
+  }
+  const records = moduleRecordCount(module);
+  const affected = Number(findings.affectedRecordCount) || 0;
+  const missing = Number(findings.missingIssueCount) || 0;
+  const invalid = Number(findings.invalidIssueCount) || 0;
+  const counts = { ...EMPTY_STATE_COUNTS, proper: Math.max(0, records - affected) };
+  if (affected <= 0) return counts;
+  if (invalid === 0) return { ...counts, incomplete: affected };
+  if (missing === 0) return { ...counts, inaccurate: affected };
+  // Older scans store issue totals, not exclusive record states. All
+  // affected records have quality issues; keep the buckets additive.
+  return { ...counts, incomplete: affected };
+}
+
+export function aggregateStateBreakdown(modules = []) {
+  const totals = { ...EMPTY_STATE_COUNTS };
+  let measured = false;
+  for (const module of modules) {
+    const counts = moduleStateCounts(module);
+    if (!counts) continue;
+    measured = true;
+    for (const state of Object.keys(EMPTY_STATE_COUNTS)) {
+      totals[state] += counts[state];
+    }
+  }
+  return measured ? totals : null;
+}
+
+export function createdInPeriodFromModules(modules = [], findings = []) {
+  const scores = new Map(
+    findings.map((module) => [module.apiName, module.overall])
+  );
+  return modules
+    .filter((module) => module.moduleApiName)
+    .map((module) => ({
+      moduleApiName: module.moduleApiName,
+      label: fieldLabel(module.moduleApiName),
+      recordCount: moduleRecordCount(module),
+      score: scores.get(module.moduleApiName) ?? null,
+    }));
+}
+
 export function summarizeModuleAnalytics(modules = []) {
-  return aggregateAnalytics(modules);
+  const moduleFindings = modules.map(buildModuleFindings);
+  return {
+    ...aggregateAnalytics(modules),
+    stateBreakdown: aggregateStateBreakdown(modules),
+    createdInPeriod: createdInPeriodFromModules(modules, moduleFindings),
+    moduleFindings,
+  };
 }
 
 export function adaptAnalyticsResults(results) {
-  const aggregate = aggregateAnalytics(results.modules);
+  const modules = results.modules ?? [];
+  const moduleFindings = modules.map(buildModuleFindings);
+  const prior = Number(results.priorScore);
 
   return {
     scanId: results.scanId,
     scope: "personal",
-    ...aggregate,
-    priorScore: null,
-    stateBreakdown: null,
-    movers: [],
-    moduleAnalytics: results.modules,
-    moduleFindings: results.modules.map(buildModuleFindings),
+    ...aggregateAnalytics(modules),
+    priorScore: Number.isFinite(prior) ? Math.round(prior) : null,
+    stateBreakdown:
+      aggregateStateBreakdown(modules) ?? results.stateBreakdown ?? null,
+    createdInPeriod: createdInPeriodFromModules(modules, moduleFindings),
+    movers: Array.isArray(results.movers) ? results.movers : [],
+    moduleAnalytics: modules,
+    moduleFindings,
   };
 }

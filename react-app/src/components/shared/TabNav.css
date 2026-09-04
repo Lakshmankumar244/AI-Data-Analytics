@@ -10,7 +10,7 @@
 }
 
 .tab-nav-inner {
-  padding-block: max(var(--app-bar-padding-block, 12px) - 4px, 4px);
+  padding-block: max(var(--app-bar-padding-block, 6px) - 2px, 2px);
 }
 
 /*
@@ -42,7 +42,7 @@
   height: auto;
   border: none;
   border-radius: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);

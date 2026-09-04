@@ -25,6 +25,24 @@ const AUTOMATION_MESSAGE = {
   stopped: "Automatic scanning is paused.",
 };
 
+function asCount(value) {
+  const count = Number(value);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+function moduleExtractedCount(module) {
+  const fromJobs = (module?.bulkJobs ?? []).reduce(
+    (highest, job) => Math.max(highest, asCount(job.providerRecordCount)),
+    0
+  );
+  return Math.max(
+    asCount(module?.recordsDownloaded),
+    asCount(module?.recordsProcessed),
+    asCount(module?.expectedRecordCount),
+    fromJobs
+  );
+}
+
 export default function RunningScreen() {
   const { connection, scanConfig, scanId, scanContext } = useAppState();
   const dispatch = useAppDispatch();
@@ -40,6 +58,7 @@ export default function RunningScreen() {
     automationMessage,
   } = useScanAnalytics(scanId);
   const progressHighWater = useRef({ scanId: null, modules: {} });
+  const extractedHighWater = useRef({ scanId: null, total: 0 });
   const countedAdvance = useRef(null);
   const [liveUsage, setLiveUsage] = useState({ credits: 0, throttleRetries: 0 });
 
@@ -146,6 +165,12 @@ export default function RunningScreen() {
         .map((module) => module.moduleApiName),
     [status]
   );
+  const plannedModuleCount = Math.max(
+    asCount(status?.plannedModuleCount),
+    scopedModules.length,
+    status?.modules?.length || 0
+  );
+  const completedModuleCount = completedModules.length;
   const activeModule = useMemo(() => {
     const pendingModules = (status?.modules ?? []).filter(
       (module) => module.status !== "COMPLETED"
@@ -155,18 +180,23 @@ export default function RunningScreen() {
         ?.moduleApiName ?? pendingModules[0]?.moduleApiName ?? null
     );
   }, [status]);
-  const allDone = completedModules.length === scopedModules.length && scopedModules.length > 0;
-  const recordsExtracted = useMemo(
-    () =>
-      (status?.modules ?? []).reduce(
-        (total, module) => total + (Number(module.recordsDownloaded) || 0),
-        0
-      ),
-    [status]
-  );
-  const completedModuleCount = Number(status?.completedModuleCount) || 0;
-  const plannedModuleCount =
-    Number(status?.plannedModuleCount) || scopedModules.length;
+  const allDone = plannedModuleCount > 0 && completedModuleCount === plannedModuleCount;
+  const recordsExtracted = useMemo(() => {
+    if (extractedHighWater.current.scanId !== scanId) {
+      extractedHighWater.current = { scanId, total: 0 };
+    }
+    const fromStatus = (status?.modules ?? []).reduce(
+      (total, module) => total + moduleExtractedCount(module),
+      0
+    );
+    const fromResults = (results?.modules ?? []).reduce(
+      (total, module) => total + asCount(module.sourceRecordCount),
+      0
+    );
+    const nextTotal = Math.max(fromStatus, fromResults, extractedHighWater.current.total);
+    extractedHighWater.current.total = nextTotal;
+    return nextTotal;
+  }, [results, scanId, status]);
   const friendlyStatusMessage =
     STATUS_MESSAGE[status?.status] ?? "Advancing the scan pipeline.";
   const visibleAutomationMessage = ["waiting-provider", "waiting-worker"].includes(

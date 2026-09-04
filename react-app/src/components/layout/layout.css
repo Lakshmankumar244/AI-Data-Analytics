@@ -22,7 +22,7 @@
 :root {
   --app-rail-width: 232px;
   --app-rail-collapsed: 64px;
-  --app-header-height: 56px;
+  --app-header-height: 44px;
   --app-content-max: 1480px;
   --app-gutter: clamp(16px, 3cqi, 40px);
   --app-header-scroll-margin: 160px;
@@ -54,12 +54,23 @@
 .app-main {
   container-type: inline-size;
   container-name: app-main;
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.app-main > .content-container:has(> .loading-state),
+.app-transient-state:has(> .loading-state) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
 }
 
 /* ---------- sidebar ---------- */
@@ -304,9 +315,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3) var(--sp-5);
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   width: 100%;
-  padding-block: 8px;
+  padding-block: 4px;
 }
 
 .app-header-lead {
@@ -342,10 +353,10 @@
 
 .app-header-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  line-height: 1.25;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -475,7 +486,7 @@
 /* ---------- sticky header group ---------- */
 
 .app-header-stack {
-  --app-bar-padding-block: 12px;
+  --app-bar-padding-block: 6px;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -495,11 +506,11 @@
 
 @media (max-height: 640px) {
   .app-header-stack {
-    --app-bar-padding-block: 8px;
+    --app-bar-padding-block: 4px;
   }
 
   .app-header {
-    min-height: 48px;
+    min-height: 40px;
   }
 }
 

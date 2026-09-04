@@ -158,16 +158,16 @@ export default function HomeScreen() {
   return (
     <ContentContainer className="home-screen">
       <PageHeader
-        eyebrow="Data health"
-        title="Reports and scans"
-        description={
-          connection
-            ? `Connected to ${connection.organizationName || "Zoho CRM"} as ${connection.connectedUser.name || connection.connectedUser.email}.`
-            : "Connect Zoho CRM to start a new scan."
-        }
+        // eyebrow="Data health"
+        // title="Reports and scans"
+        // description={
+        //   connection
+        //     ? `Connected to ${connection.organizationName || "Zoho CRM"} as ${connection.connectedUser.name || connection.connectedUser.email}.`
+        //     : "Connect Zoho CRM to start a new scan."
+        // }
         actions={
           connection ? (
-            <>
+            <div className="home-actions">
               {connection.availableConnections?.length > 1 && (
                 <Dropdown
                   label="New scans use"
@@ -182,21 +182,23 @@ export default function HomeScreen() {
                   }))}
                 />
               )}
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => window.location.assign(ZOHO_CONSENT_URL)}
-              >
-                Connect another Zoho account
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => dispatch({ type: "showSetup" })}
-              >
-                New scan
-              </button>
-            </>
+              <div className="home-actions-buttons">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => window.location.assign(ZOHO_CONSENT_URL)}
+                >
+                  Connect another Zoho account
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => dispatch({ type: "showSetup" })}
+                >
+                  New scan
+                </button>
+              </div>
+            </div>
           ) : (
             <button
               type="button"
@@ -253,10 +255,11 @@ export default function HomeScreen() {
             <table className="history-table">
               <thead>
                 <tr>
-                  <th>Created</th>
                   <th>Zoho account</th>
+                  <th>Email</th>
                   <th>Modules</th>
                   <th>Records</th>
+                  <th>Created</th>
                   <th>Status</th>
                   <th>Action</th>
                 </tr>
@@ -265,29 +268,22 @@ export default function HomeScreen() {
                 {visibleScans.map((scan) => {
                   const canOpen = scan.status === "COMPLETED" && scan.hasResults;
                   const canResume = !["COMPLETED", "FAILED_TERMINAL"].includes(scan.status);
+                  const accountName =
+                    scan.connection?.organizationName ||
+                    scan.connection?.name ||
+                    "Unknown account";
+                  const accountEmail = scan.connection?.email || "—";
                   return (
                     <tr key={scan.scanId}>
-                      <td>{readableDate(scan.createdAt)}</td>
                       <td>
-                        <span className="history-account-name">
-                          {scan.connection?.organizationName ||
-                            scan.connection?.name ||
-                            scan.connection?.email ||
-                            "Unknown account"}
-                        </span>
-                        {(scan.connection?.organizationName ||
-                          (scan.connection?.name && scan.connection?.email)) && (
-                          <span className="history-account-email">
-                            {scan.connection.organizationName
-                              ? [scan.connection.name, scan.connection.email]
-                                  .filter(Boolean)
-                                  .join(" · ")
-                              : scan.connection.email}
-                          </span>
-                        )}
+                        <span className="history-account-name">{accountName}</span>
+                      </td>
+                      <td>
+                        <span className="history-account-email">{accountEmail}</span>
                       </td>
                       <td><ModuleSummary modules={scan.modules} /></td>
                       <td className="mono">{formatNumber(scan.recordCount)}</td>
+                      <td className="history-created">{readableDate(scan.createdAt)}</td>
                       <td>
                         {scan.status === "COMPLETED" ? (
                           <Band band={COMPLETED_BAND} />

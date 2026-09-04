@@ -21,9 +21,11 @@ QUALITY_FIELD_CANDIDATES = frozenset(
     {
         "First_Name",
         "Last_Name",
+        "Full_Name",
         "Company",
         "Account_Name",
         "Deal_Name",
+        "Name",
         "Email",
         "Secondary_Email",
         "Phone",

@@ -12,6 +12,7 @@ from analytics.repository import (
     find_pipeline_tasks,
     find_processing_batches,
 )
+from analytics.overview import build_overview
 from analytics.service import StoredAnalyticsError, build_results, build_status
 from common.core import AuthenticationRequired, get_current_user_id, json_response
 
@@ -82,7 +83,11 @@ def get_scan_results(request, datastore, scan_id):
                 404,
             )
         result_rows = find_analytics_results(zcql, scan_row["ROWID"])
-        return json_response(build_results(scan_row, result_rows))
+        payload = build_results(scan_row, result_rows)
+        payload.update(
+            build_overview(zcql, scan_row, result_rows, payload.get("modules") or [])
+        )
+        return json_response(payload)
     except StoredAnalyticsError as exc:
         LOGGER.exception("Stored analytics is invalid scan_id=%s: %s", scan_id, exc)
         return json_response(

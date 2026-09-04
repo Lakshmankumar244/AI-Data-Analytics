@@ -1,104 +1,186 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState, useActions } from "../../../state/AppContext";
 import * as api from "../../../data/client";
-import { RECORD_STATES, stateMeta } from "../../../utils/bands";
+import { stateMeta } from "../../../utils/bands";
 import { formatNumber } from "../../../utils/format";
+import { groupOwnerAnalytics, recordOwnerQueryKeys } from "../../../data/ownerAnalytics";
 import Band from "../../shared/Band";
 import LoadingState from "../../shared/LoadingState";
 import "./RecordsTab.css";
 
 const SUPPORTED_STATES = new Set(["incomplete", "inaccurate"]);
+const RECORD_FILTERS = [
+  { id: "proper", label: "Clean" },
+  { id: "incomplete", label: "Missing information" },
+  { id: "inaccurate", label: "Wrong values" },
+  { id: "suspicious", label: "Looks fabricated" },
+  { id: "suspected_duplicate", label: "Possible duplicate" },
+  { id: "confirmed_duplicate", label: "Certain duplicate" },
+];
 
 function formatDate(iso) {
   if (!iso) return "N/A";
   return new Date(iso).toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function recordTitle(record) {
+  const moduleName = String(record?.module || "").trim().toLowerCase();
+  const candidates = [record?.recordName, record?.recordRef];
+  for (const candidate of candidates) {
+    const name = String(candidate || "").trim();
+    if (name && name.toLowerCase() !== moduleName && name !== "Record") return name;
+  }
+  return "Unnamed record";
+}
+
+function matchesActiveState(record, activeState) {
+  if (!activeState) return true;
+  if (!SUPPORTED_STATES.has(activeState)) return false;
+  return record.state === activeState;
+}
+
 export default function RecordsTab() {
-  const { scanId, scan, scanConfig, focusState, filterModules } = useAppState();
+  const { scanId, scan, scanConfig, focusState, filterModules, filterUsers } = useAppState();
   const { setFilter } = useActions();
   const [page, setPage] = useState(1);
+  const [query, setQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
   const [data, setData] = useState(null);
+  const [tableLoading, setTableLoading] = useState(true);
   const [error, setError] = useState(null);
-  const activeState = SUPPORTED_STATES.has(focusState) ? focusState : null;
+  const activeState = RECORD_FILTERS.some((state) => state.id === focusState)
+    ? focusState
+    : null;
   const scanDepth = scan?.reportContext?.depth || scanConfig.depth || "quick";
+  const listedCounts = data?.summary?.stateCounts;
+  const scanCleanCount = Number(scan?.stateBreakdown?.proper);
 
-  // Any filter change resets to page 1 - a stale page number past the end
-  // of a newly-filtered result set would just render an empty table.
   useEffect(() => {
     setPage(1);
-  }, [focusState, filterModules]);
+  }, [focusState, filterModules, filterUsers, submittedQuery]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSubmittedQuery(query.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
     let cancelled = false;
-    setData(null);
+    setTableLoading(true);
     setError(null);
-    const filters = { states: activeState ? [activeState] : [], modules: filterModules };
+    const owners = groupOwnerAnalytics(scan?.moduleAnalytics ?? [], []);
+    const filters = {
+      states: activeState ? [activeState] : [],
+      modules: filterModules,
+      owners: recordOwnerQueryKeys(owners, filterUsers),
+      q: submittedQuery,
+    };
     api.getRecords(scanId, filters, page)
       .then((res) => {
-        if (!cancelled) setData(res);
+        if (cancelled) return;
+        setData(res);
+        setTableLoading(false);
       })
       .catch((requestError) => {
-        if (!cancelled) setError(requestError.message);
+        if (cancelled) return;
+        setError(requestError.message);
+        setTableLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [scanId, activeState, filterModules, page]);
+  }, [scanId, scan, activeState, filterModules, filterUsers, page, submittedQuery]);
+
+  const rows = useMemo(
+    () => (data?.records ?? []).filter((record) => matchesActiveState(record, activeState)),
+    [activeState, data]
+  );
+
+  const emptyHint = useMemo(() => {
+    if (activeState === "proper") {
+      return Number.isFinite(scanCleanCount) && scanCleanCount > 0
+        ? `${formatNumber(scanCleanCount)} clean records were counted in this scan. They are not stored as a list — only flagged findings are kept for investigation.`
+        : "Clean records are not listed. Only flagged findings are stored for investigation.";
+    }
+    if (activeState && !SUPPORTED_STATES.has(activeState)) {
+      return "This classification is not stored on the current scan yet.";
+    }
+    if (activeState) {
+      return "No records match the selected state and module filters.";
+    }
+    if (scanDepth === "quick") {
+      return "Quick scans exclude optional missing fields. Those blanks may still affect completeness.";
+    }
+    return "No records matched the finding rules for this scan depth.";
+  }, [activeState, scanCleanCount, scanDepth]);
+
+  const inScopeCount = activeState
+    ? Number(listedCounts?.[activeState] || 0)
+    : Number(listedCounts?.listedRecordCount ?? data?.summary?.storedSampleCount ?? 0);
+  const showSampleNote =
+    data?.summary?.measured &&
+    Number(data.summary.affectedRecordCount) > Number(data.summary.storedSampleCount || 0);
 
   return (
     <div className="records-tab">
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Records</p>
-            <h1>Flagged records</h1>
-          </div>
-          {data?.summary?.measured && (
-            <div className="records-header-count">
-              <strong>{formatNumber(data.summary.affectedRecordCount)}</strong>
-              <span>actionable</span>
-            </div>
-          )}
+      <section className="panel records-panel">
+        <div className="panel-header records-panel-header">
+          <p className="eyebrow">Records</p>
+        </div>
+        <div className="records-state-tabs" role="tablist" aria-label="Filter by record state">
+          {RECORD_FILTERS.map((state) => {
+            const meta = stateMeta(state.id);
+            const isActive = activeState === state.id;
+            const count = listedCounts
+              ? Number(listedCounts[state.id] || 0)
+              : null;
+            return (
+              <button
+                key={state.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className={`records-state-tab${isActive ? " records-state-tab-active" : ""}`}
+                style={isActive ? { borderTopColor: meta?.color || "var(--brand)" } : undefined}
+                onClick={() => setFilter({ focusState: isActive ? null : state.id })}
+              >
+                <span>{state.label}</span>
+                <strong className="mono">
+                  {count === null ? "—" : formatNumber(count)}
+                </strong>
+              </button>
+            );
+          })}
         </div>
 
-        <div className="records-state-filter" role="group" aria-label="Filter by state">
-          <button
-            type="button"
-            className={`chip${!activeState ? " chip-active" : ""}`}
-            aria-pressed={!activeState}
-            onClick={() => setFilter({ focusState: null })}
+        <div className="records-toolbar">
+          <form
+            className="records-search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSubmittedQuery(query.trim());
+            }}
           >
-            All
-          </button>
-          {RECORD_STATES.filter((s) => SUPPORTED_STATES.has(s.id)).map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={`chip${activeState === s.id ? " chip-active" : ""}`}
-              aria-pressed={activeState === s.id}
-              onClick={() => setFilter({ focusState: activeState === s.id ? null : s.id })}
-            >
-              {s.label}
-            </button>
-          ))}
+            <input
+              type="search"
+              value={query}
+              placeholder="Search records..."
+              aria-label="Search records"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </form>
         </div>
 
-        <p className="records-disclosure">
-          Completeness and validity findings only. CRM field values and record IDs are not displayed.
-        </p>
-        {data?.summary?.schemaVersion === "record-findings-v3" &&
-          data.summary.affectedRecordCount > data.summary.storedSampleCount && (
-            <p className="records-sample-note">
-              Showing up to {formatNumber(data.summary.storedSampleCount)} representative
-              flagged records from {formatNumber(data.summary.affectedRecordCount)} detected.
-              Totals and Fix recommendations include every finding.
-            </p>
-          )}
+        {showSampleNote && (
+          <p className="records-sample-note">
+            Showing up to {formatNumber(data.summary.storedSampleCount)} representative
+            flagged records from {formatNumber(data.summary.affectedRecordCount)} detected.
+          </p>
+        )}
 
         {error ? (
           <div className="records-message records-error">{error}</div>
-        ) : !data ? (
+        ) : tableLoading || !data ? (
           <LoadingState label="Loading records" />
         ) : !data.summary?.measured ? (
           <div className="records-message">
@@ -119,41 +201,36 @@ export default function RecordsTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.records.length === 0 && (
+                  {rows.length === 0 && (
                     <tr>
                       <td colSpan={6} className="records-empty">
                         <div className="records-empty-state">
-                          <span className="records-empty-icon" aria-hidden="true">✓</span>
-                          <strong>No actionable issues found</strong>
-                          <span>
-                            {activeState
-                              ? "No records match the selected state and module filters."
-                              : scanDepth === "quick"
-                              ? "Quick scans exclude optional missing fields. Those blanks may still affect completeness."
-                              : "No records matched the finding rules for this scan depth."}
-                          </span>
+                          <strong>No matching records</strong>
+                          <span>{emptyHint}</span>
                         </div>
                       </td>
                     </tr>
                   )}
-                  {data.records.map((r) => (
-                    <tr key={r.findingId}>
-                      <td className="mono records-id">{r.recordRef}</td>
-                      <td>{r.module}</td>
+                  {rows.map((record) => (
+                    <tr key={record.findingId}>
                       <td>
-                        <Band band={stateMeta(r.state)} size="sm" />
+                        <span className="records-name">{recordTitle(record)}</span>
+                      </td>
+                      <td>{record.module}</td>
+                      <td>
+                        <Band band={stateMeta(record.state)} size="sm" />
                       </td>
                       <td>
-                        <div>{r.reason}</div>
-                        {r.issues?.length > 0 && (
+                        <div>{record.reason}</div>
+                        {record.issues?.length > 0 && (
                           <div className="records-fields">
-                            {r.issues.slice(0, 4).map((issue) => issue.fieldLabel || issue.fieldApiName).join(", ")}
-                            {r.issues.length > 4 ? ` +${r.issues.length - 4} more` : ""}
+                            {record.issues.slice(0, 4).map((issue) => issue.fieldLabel || issue.fieldApiName).join(", ")}
+                            {record.issues.length > 4 ? ` +${record.issues.length - 4} more` : ""}
                           </div>
                         )}
                       </td>
-                      <td>{r.ownerName}</td>
-                      <td className="mono">{formatDate(r.computedAt)}</td>
+                      <td>{record.ownerName}</td>
+                      <td className="mono">{formatDate(record.computedAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -162,16 +239,14 @@ export default function RecordsTab() {
 
             <div className="records-pagination">
               <span className="records-pagination-count">
-                {data.summary.schemaVersion === "record-findings-v3"
-                  ? `${formatNumber(data.summary.storedSampleCount)} samples stored · ${formatNumber(data.summary.affectedRecordCount)} total flagged`
-                  : `${formatNumber(data.summary.affectedRecordCount)} flagged record${data.summary.affectedRecordCount === 1 ? "" : "s"} in scope`}
+                {formatNumber(inScopeCount)} record{inScopeCount === 1 ? "" : "s"} in this view
               </span>
               <div className="records-pagination-controls">
                 <button
                   type="button"
                   className="btn btn-secondary"
                   disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
+                  onClick={() => setPage((current) => current - 1)}
                 >
                   Previous
                 </button>
@@ -181,8 +256,8 @@ export default function RecordsTab() {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  disabled={!data.hasMore}
-                  onClick={() => setPage((p) => p + 1)}
+                  disabled={!data.hasMore || rows.length === 0}
+                  onClick={() => setPage((current) => current + 1)}
                 >
                   Next
                 </button>

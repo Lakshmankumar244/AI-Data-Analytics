@@ -18,6 +18,10 @@ import {
   findingsFromModules,
   shareOf,
 } from "./overviewModel";
+import {
+  countUsersNeedingHelp,
+  groupOwnerAnalytics,
+} from "../../../data/ownerAnalytics";
 import { formatReportDate } from "../../../utils/format";
 import { Button } from "@/components/ui/button";
 import "./OverviewTab.css";
@@ -30,7 +34,7 @@ const CLOCK_LABELS = {
 };
 
 export default function OverviewTab() {
-  const { scan, focusState, filterModules } = useAppState();
+  const { scan, focusState, filterModules, filterUsers, scanConfig } = useAppState();
   const { setFilter, setTab } = useActions();
 
   const scopedScan = useMemo(() => {
@@ -49,6 +53,16 @@ export default function OverviewTab() {
     );
   }, [filterModules, scopedScan]);
 
+  const owners = useMemo(
+    () => groupOwnerAnalytics(scopedModules, []),
+    [scopedModules]
+  );
+  const visibleOwners = useMemo(() => {
+    if (!filterUsers.length) return owners;
+    const selected = new Set(filterUsers);
+    return owners.filter((owner) => selected.has(owner.ownerKey));
+  }, [filterUsers, owners]);
+
   if (!scopedScan) return null;
 
   const {
@@ -61,6 +75,7 @@ export default function OverviewTab() {
     stateBreakdown,
     domainScores,
     movers,
+    createdInPeriod,
   } = scopedScan;
 
   const moduleCount =
@@ -70,7 +85,10 @@ export default function OverviewTab() {
     0;
   const cleanRecords = stateBreakdown ? (stateBreakdown.proper ?? 0) : null;
   const attentionRecords = attentionFromBreakdown(stateBreakdown);
-  const suspiciousRecords = stateBreakdown ? (stateBreakdown.suspicious ?? 0) : null;
+  const suspiciousRecords =
+    stateBreakdown && (stateBreakdown.suspicious ?? 0) > 0
+      ? stateBreakdown.suspicious
+      : null;
   const findings = findingsFromModules(scopedScan.moduleFindings, filterModules);
   const duplicateCount = duplicateCountFromModules(scopedModules);
   const explanation = dominantIssue({
@@ -87,6 +105,19 @@ export default function OverviewTab() {
   const depthLabel = reportContext?.depth
     ? String(reportContext.depth).replace(/^./, (letter) => letter.toUpperCase())
     : null;
+  const visibleMovers = (movers ?? []).filter((mover) => {
+    if (mover.type === "module" && filterModules.length) {
+      return filterModules.includes(mover.key) || filterModules.includes(mover.label);
+    }
+    if (mover.type === "user" && filterUsers.length) {
+      return filterUsers.includes(mover.key);
+    }
+    return true;
+  });
+  const usersNeedingHelp = countUsersNeedingHelp(
+    visibleOwners,
+    scanConfig?.rules?.minRecordsPerUser ?? 25
+  );
 
   return (
     <div className="overview-tab">
@@ -107,6 +138,7 @@ export default function OverviewTab() {
           cleanShare={shareOf(cleanRecords, recordsInScope)}
           attentionShare={shareOf(attentionRecords, recordsInScope)}
           suspiciousShare={shareOf(suspiciousRecords, recordsInScope)}
+          usersNeedingHelp={usersNeedingHelp}
           onOpenUsers={() => setTab("users")}
         />
       </div>
@@ -179,6 +211,7 @@ export default function OverviewTab() {
 
       <div className="overview-context">
         <OverviewCreatedPeriod
+          series={createdInPeriod ?? []}
           periodFrom={periodFrom}
           periodTo={periodTo}
           clockLabel={clockLabel}
@@ -192,7 +225,9 @@ export default function OverviewTab() {
               <h2>Since the last check</h2>
             </div>
           </div>
-          <MoversList movers={movers} />
+          <div className="overview-context-body overview-movers-scroll">
+            <MoversList movers={visibleMovers} />
+          </div>
         </section>
 
         <OverviewFindings findings={findings} />

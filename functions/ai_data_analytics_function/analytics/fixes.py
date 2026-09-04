@@ -21,7 +21,7 @@ LOGGER = logging.getLogger(__name__)
 QUERY_PAGE_SIZE = 300
 MAX_ACTIONS = 30
 SUPPORTED_RECORD_FINDING_SCHEMAS = frozenset(
-    {"record-findings-v1", "record-findings-v2", "record-findings-v3"}
+    {"record-findings-v1", "record-findings-v2", "record-findings-v3", "record-findings-v4"}
 )
 SEVERITY_WEIGHT = {"LOW": 1, "MEDIUM": 2, "HIGH": 4, "CRITICAL": 8}
 ISSUE_LABELS = {
@@ -208,7 +208,7 @@ def get_fix_plan(request, datastore, scan_id):
             )
 
         groups = {}
-        if schema_version == "record-findings-v3":
+        if schema_version in {"record-findings-v3", "record-findings-v4"}:
             for module_name, module_groups in aggregate_issue_groups.items():
                 for aggregate_group in module_groups:
                     field_name = str(aggregate_group.get("fieldApiName") or "")

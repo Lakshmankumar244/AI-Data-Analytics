@@ -19,7 +19,7 @@ QUALITY_RULE_VERSION = "quality-rules-v1"
 DOMAIN_SCHEMA_VERSION = "quality-domains-v2"
 DOMAIN_RULE_VERSION = "phase2-domain-rules-v1"
 OWNER_SCHEMA_VERSION = "owner-quality-v2"
-RECORD_FINDING_SCHEMA_VERSION = "record-findings-v3"
+RECORD_FINDING_SCHEMA_VERSION = "record-findings-v4"
 RECORD_FINDING_RULE_VERSION = "record-rules-v3"
 MAX_STORED_FINDINGS_PER_MODULE = 40
 MAX_STORED_ISSUES_PER_FINDING = 4
@@ -39,6 +39,7 @@ PRESALES_BUSINESS_FIELDS = {
         {
             "First_Name",
             "Last_Name",
+            "Full_Name",
             "Company",
             "Email",
             "Phone",
@@ -49,7 +50,7 @@ PRESALES_BUSINESS_FIELDS = {
         }
     ),
     "Contacts": frozenset(
-        {"First_Name", "Last_Name", "Account_Name", "Email", "Phone", "Mailing_Country"}
+        {"First_Name", "Last_Name", "Full_Name", "Account_Name", "Email", "Phone", "Mailing_Country"}
     ),
     "Accounts": frozenset(
         {"Account_Name", "Phone", "Industry", "Billing_Country"}
@@ -533,6 +534,29 @@ def _missing_issue_policy(field_name, metadata, module_name, depth_policy):
     }
 
 
+def _record_display_name(row, header_mapping):
+    def value_for(field_name):
+        header = header_mapping.get(field_name)
+        if not header:
+            return ""
+        return str(row.get(header) or "").strip()
+
+    person = " ".join(
+        part for part in (value_for("First_Name"), value_for("Last_Name")) if part
+    ).strip()
+    for field_name in ("Deal_Name", "Account_Name", "Full_Name"):
+        value = value_for(field_name)
+        if value:
+            return value
+    if person:
+        return person
+    for field_name in ("Company", "Name"):
+        value = value_for(field_name)
+        if value:
+            return value
+    return ""
+
+
 def _record_finding_candidate(
     row,
     field_names,
@@ -634,6 +658,7 @@ def _record_finding_candidate(
             1 for issue in issues if issue["metricGroup"] == "VALIDITY"
         ),
         "staleCount": 0,
+        "displayName": _record_display_name(row, header_mapping),
         "issues": issues,
     }
 
@@ -747,6 +772,7 @@ def _persist_record_findings(app, scan_row, module_row, batch_row, source_checks
                 "validator": issue["validator"],
                 "importance": issue["importance"],
                 "fieldLabel": issue["fieldLabel"],
+                "recordDisplayName": finding.get("displayName") or "",
             }
             pending_issue_rows.append(
                 {
@@ -1153,6 +1179,18 @@ def _persist_record_finding_summary(app, scan_row, module_row, bulk_row, summary
         "storedSampleCount": int(summary.get("storedSampleCount") or 0),
         "sampleLimit": MAX_STORED_FINDINGS_PER_MODULE,
         "issueGroups": issue_groups,
+        "stateCounts": {
+            "proper": int((summary.get("stateCounts") or {}).get("proper") or 0),
+            "incomplete": int((summary.get("stateCounts") or {}).get("incomplete") or 0),
+            "inaccurate": int((summary.get("stateCounts") or {}).get("inaccurate") or 0),
+            "suspicious": int((summary.get("stateCounts") or {}).get("suspicious") or 0),
+            "suspected_duplicate": int(
+                (summary.get("stateCounts") or {}).get("suspected_duplicate") or 0
+            ),
+            "confirmed_duplicate": int(
+                (summary.get("stateCounts") or {}).get("confirmed_duplicate") or 0
+            ),
+        },
     }
     aggregate_json = _canonical_json(payload)
     if len(aggregate_json) > MAX_AGGREGATE_JSON_LENGTH:
@@ -1389,6 +1427,14 @@ def process_and_finalize(app, task_row):
         "invalidIssueCount": 0,
         "storedSampleCount": 0,
         "issueGroups": {},
+        "stateCounts": {
+            "proper": 0,
+            "incomplete": 0,
+            "inaccurate": 0,
+            "suspicious": 0,
+            "suspected_duplicate": 0,
+            "confirmed_duplicate": 0,
+        },
     }
     remaining_finding_samples = MAX_STORED_FINDINGS_PER_MODULE
     batch_table = datastore.table("processing_batches")
@@ -1484,8 +1530,16 @@ def process_and_finalize(app, task_row):
                                 module_row,
                                 bulk_row["source_file_checksum"],
                             )
-                            if finding is not None:
+                            if finding is None:
+                                finding_summary["stateCounts"]["proper"] += 1
+                            elif finding["invalidCount"] > 0:
+                                finding_summary["stateCounts"]["inaccurate"] += 1
                                 record_findings.append(finding)
+                            elif finding["missingCount"] > 0:
+                                finding_summary["stateCounts"]["incomplete"] += 1
+                                record_findings.append(finding)
+                            else:
+                                finding_summary["stateCounts"]["proper"] += 1
 
                         if reusable_partial is None:
                             partial_json = _canonical_json(partial)

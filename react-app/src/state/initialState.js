@@ -57,6 +57,7 @@ export function buildInitialState() {
     scan: null, // populated once the scan lands in "report" phase
     tab: "overview",
     filterModules: [],
+    filterUsers: [],
     focusState: null,
     errorMessage: null,
   };

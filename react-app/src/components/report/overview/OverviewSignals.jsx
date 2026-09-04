@@ -13,6 +13,7 @@ export default function OverviewSignals({
   cleanShare,
   attentionShare,
   suspiciousShare,
+  usersNeedingHelp,
   onOpenUsers,
 }) {
   return (
@@ -58,10 +59,14 @@ export default function OverviewSignals({
       />
       <OverviewKpiCard
         label="Users needing help"
-        value={null}
-        tone="neutral"
+        value={usersNeedingHelp}
+        tone={usersNeedingHelp ? "attention" : "neutral"}
         icon={Users}
-        hint="User-level help ranking is not available on this scan."
+        hint={
+          usersNeedingHelp === null
+            ? "User-level help ranking is not available on this scan."
+            : "Owners below the stable band, with enough records to score."
+        }
         unavailableLabel="Not available"
         action={
           onOpenUsers

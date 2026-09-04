@@ -55,14 +55,8 @@ function OwnerCard({ owner }) {
 export default function UserQualityTable({ owners }) {
   return (
     <section className="users-workspace panel">
-      <div className="panel-header">
-        <div>
-          <p className="eyebrow">Owner investigation</p>
-          <h2>User quality</h2>
-        </div>
-        <p className="users-workspace-note">
-          Suggested next steps are not included in owner analytics.
-        </p>
+      <div className="panel-header users-panel-header">
+        <p className="eyebrow">Users</p>
       </div>
 
       <div className="users-table-wrap">

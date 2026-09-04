@@ -5,22 +5,20 @@
 */
 .filter-bar {
   min-width: 0;
-  border-bottom: 1px solid var(--line);
 }
 
 .filter-bar-inner {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  padding-block: var(--app-bar-padding-block, 10px);
+  column-gap: 10px;
+  padding-block: var(--app-bar-padding-block, 6px);
 }
 
 .filter-bar-lead {
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex: 0 1 auto;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -29,13 +27,13 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 6px 10px;
+  min-height: 28px;
+  padding: 4px 8px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink-soft);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   transition:
     border-color var(--duration-fast) var(--ease-out),
@@ -50,46 +48,44 @@
 }
 
 .filter-bar-title-block {
-  flex: 0 1 auto;
   min-width: 0;
-  padding-right: 16px;
+  padding-right: 10px;
   border-right: 1px solid var(--line);
 }
 
 .filter-bar-title-block h1,
 .filter-bar-subtitle {
-  max-width: clamp(110px, 16cqi, 240px);
+  max-width: clamp(96px, 14cqi, 200px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .filter-bar-title-block h1 {
-  font-size: 16px;
-  line-height: 1.2;
+  font-size: 13px;
+  line-height: 1.15;
   font-weight: 600;
 }
 
 .filter-bar-subtitle {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--muted);
+  display: none;
 }
 
 .filter-command {
   display: flex;
   align-items: stretch;
   min-width: 0;
+  width: 100%;
 }
 
 .filter-command-bar {
   display: grid;
   grid-template-columns:
-    minmax(15.5rem, 1.8fr)
-    repeat(4, minmax(6.75rem, 1fr));
-  flex: 1 1 auto;
-  min-width: min(42rem, 100%);
-  padding: 2px 4px;
+    minmax(8rem, 1.5fr)
+    repeat(4, minmax(5rem, 1fr));
+  width: 100%;
+  min-width: 0;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface) 78%, var(--paper));
@@ -97,8 +93,8 @@
 
 .filter-command-bar.filter-command-no-users {
   grid-template-columns:
-    minmax(15.5rem, 1.8fr)
-    repeat(3, minmax(6.75rem, 1fr));
+    minmax(8rem, 1.5fr)
+    repeat(3, minmax(5rem, 1fr));
 }
 
 .filter-command-sheet {
@@ -111,9 +107,9 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 3px;
+  gap: 1px;
   min-width: 0;
-  padding: 6px 14px;
+  padding: 3px 10px;
 }
 
 .filter-command-bar .filter-control {
@@ -130,7 +126,7 @@
 }
 
 .filter-control-value {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 550;
   color: var(--ink);
   white-space: nowrap;
@@ -139,10 +135,10 @@
 }
 
 .filter-control-period-value {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: unset;
-  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
 }
 
 .filter-period-compact {
@@ -229,6 +225,8 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
 }
 
 .filter-dropdown-option {
@@ -275,11 +273,9 @@
 }
 
 .filter-bar-toolbar {
-  margin-left: auto;
-  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .filter-bar-mobile-trigger {
@@ -295,9 +291,9 @@
 .filter-bar-action {
   background: none;
   border: none;
-  min-height: 32px;
-  padding: 4px 6px;
-  font-size: 13px;
+  min-height: 28px;
+  padding: 2px 4px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink-soft);
   border-radius: var(--radius-sm);
@@ -351,33 +347,18 @@
   background: var(--surface-sunken);
 }
 
-@container app-main (max-width: 1100px) {
-  .filter-period-full {
-    display: none;
-  }
+.filter-command-bar .filter-period-full {
+  display: none;
+}
 
-  .filter-period-compact {
-    display: inline;
-  }
+.filter-command-bar .filter-period-compact {
+  display: inline;
 }
 
 @container app-main (max-width: 900px) {
   .filter-bar-title-block {
     border-right: none;
     padding-right: 0;
-  }
-
-  .filter-command-bar {
-    flex: 1 1 100%;
-    grid-template-columns:
-      minmax(min(14rem, 100%), 1.6fr)
-      repeat(4, minmax(0, 1fr));
-  }
-
-  .filter-command-bar.filter-command-no-users {
-    grid-template-columns:
-      minmax(min(14rem, 100%), 1.6fr)
-      repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -395,13 +376,11 @@
   }
 
   .filter-bar-inner {
-    gap: 8px 14px;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
-}
 
-@container app-main (max-width: 560px) {
   .filter-bar-lead {
-    flex: 1 1 auto;
+    min-width: 0;
   }
 }
 

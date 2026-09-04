@@ -28,7 +28,10 @@ export function reducer(state, action) {
       const scanHistory = action.scanHistory ?? [];
       return {
         ...state,
-        phase: action.connection || scanHistory.length ? "home" : "setup",
+        // Session restore waits for getConnection() in App.jsx (boot phase)
+        // before this action fires. Authenticated landing is Configure scan.
+        // Reports remains available through showHome / the sidebar.
+        phase: "setup",
         connection: action.connection,
         scanConfig: scanConfigForConnection(state.scanConfig, action.connection),
         scanHistory,
@@ -111,6 +114,7 @@ export function reducer(state, action) {
         scanContext: null,
         tab: "overview",
         filterModules: [],
+        filterUsers: [],
         historyNeedsRefresh: action.refreshHistory ?? true,
       };
 
@@ -122,6 +126,7 @@ export function reducer(state, action) {
         scanContext: null,
         scan: null,
         filterModules: [],
+        filterUsers: [],
       };
 
     case "showSetup":

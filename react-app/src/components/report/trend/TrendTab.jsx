@@ -1,27 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../../../state/AppContext";
 import * as api from "../../../data/client";
 import LoadingState from "../../shared/LoadingState";
+import Dropdown from "../../shared/Dropdown";
 import LineChart from "./LineChart";
 import { formatDelta } from "../../../utils/format";
 import { DOMAIN_LABELS } from "../../../utils/bands";
+import { TREND_GRAINS, bucketTrendSeries } from "./trendGrain";
 import "./TrendTab.css";
-
-function localPeriod(timestamp) {
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return String(timestamp || "Unknown");
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
 
 export default function TrendTab() {
   const { scanId, scan, filterModules } = useAppState();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [grain, setGrain] = useState("month");
   const reportModules = (scan?.moduleFindings ?? []).map((module) => module.apiName);
   const selectedModules = filterModules.length ? filterModules : reportModules;
   const moduleKey = [...selectedModules].sort().join(",");
@@ -45,6 +37,20 @@ export default function TrendTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanId, moduleKey]);
 
+  const seriesGroups = useMemo(() => {
+    if (!data) return [];
+    const rawGroups = (data.moduleSeries?.length
+      ? data.moduleSeries
+      : [{ moduleApiName: data.criteria.modules.join(" + "), series: data.series }]
+    ).filter((group) => group.series?.length);
+    return rawGroups
+      .map((group) => ({
+        ...group,
+        series: bucketTrendSeries(group.series, grain),
+      }))
+      .filter((group) => group.series.length);
+  }, [data, grain]);
+
   if (error) {
     return (
       <div className="trend-tab">
@@ -57,11 +63,7 @@ export default function TrendTab() {
     );
   }
   if (!data) return <LoadingState label="Loading trend" />;
-  const rawGroups = (data.moduleSeries?.length
-    ? data.moduleSeries
-    : [{ moduleApiName: data.criteria.modules.join(" + "), series: data.series }]
-  ).filter((group) => group.series?.length);
-  if (rawGroups.length === 0) {
+  if (seriesGroups.length === 0) {
     return (
       <div className="trend-tab">
         <section className="panel trend-state">
@@ -76,20 +78,10 @@ export default function TrendTab() {
     );
   }
 
-  const seriesGroups = rawGroups.map((group) => ({
-    ...group,
-    series: group.series.map((point) => ({
-      ...point,
-      period: localPeriod(point.timestamp),
-    })),
-  }));
   const allPoints = seriesGroups
     .flatMap((group) => group.series)
     .sort((left, right) => new Date(left.timestamp) - new Date(right.timestamp));
-  const combinedSeries = (data.series ?? []).map((point) => ({
-    ...point,
-    period: localPeriod(point.timestamp),
-  }));
+  const combinedSeries = bucketTrendSeries(data.series ?? [], grain);
   const summarySeries = combinedSeries.length ? combinedSeries : allPoints;
   const average = summarySeries.reduce((sum, point) => sum + point.score, 0) / summarySeries.length;
   const first = allPoints[0];
@@ -112,13 +104,13 @@ export default function TrendTab() {
     <div className="trend-tab">
       <section className="panel">
         <div className="panel-header">
-          <div>
-            <p className="eyebrow">Score over time</p>
-            <h1>{first.period} &rarr; {last.period}</h1>
-          </div>
-          <p className="trend-criteria">
-            {data.criteria.modules.join(", ")} &middot; {data.criteria.clock} &middot; {data.criteria.depth}
-          </p>
+          <p className="eyebrow">Score over time</p>
+          <Dropdown
+            label="Grain"
+            value={grain}
+            options={TREND_GRAINS}
+            onChange={setGrain}
+          />
         </div>
 
         <div className="trend-legend" aria-label="Chart series">

@@ -1,11 +1,26 @@
 /* Horizontal insetting and the max-width come from the shared content
    container; the title block comes from PageHeader. */
 .running-screen {
-  padding-block: var(--sp-6) var(--sp-8);
+  padding-block: var(--sp-3) var(--sp-6);
+}
+
+.running-screen .page-header {
+  margin-bottom: var(--sp-3);
+  gap: var(--sp-2) var(--sp-4);
+  align-items: flex-start;
+}
+
+.running-screen .page-header-text h1 {
+  margin-top: 2px;
+  font-size: clamp(18px, 2cqi, 22px);
+}
+
+.running-screen .page-header-description {
+  margin-top: var(--sp-1);
 }
 
 .running-refresh {
-  margin-top: var(--sp-4);
+  margin-top: var(--sp-2);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -30,7 +45,7 @@
 }
 
 .running-operation {
-  margin-top: var(--sp-3);
+  margin-top: var(--sp-2);
   color: var(--ink-soft);
   font-size: 13px;
 }
@@ -59,7 +74,7 @@
 }
 
 .running-error {
-  margin-top: var(--sp-3);
+  margin-top: var(--sp-2);
   color: var(--risk);
   font-size: 13px;
 }

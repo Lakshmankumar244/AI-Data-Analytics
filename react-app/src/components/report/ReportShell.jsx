@@ -29,7 +29,7 @@ export default function ReportShell() {
         <FilterBar />
       </StickyHeaderStack>
       <ContentContainer className="report-shell-body">
-        <div className="report-shell-panel">
+        <div className="report-shell-panel" data-export-root>
           {ActiveTab ? <ActiveTab /> : <ComingSoonPanel tabLabel="Users" />}
         </div>
       </ContentContainer>

@@ -6,12 +6,16 @@
   min-width: 0;
 }
 
-.users-tab .page-header {
-  margin-bottom: 0;
-}
-
 .users-tab .panel-header {
   align-items: flex-start;
+}
+
+.users-panel-header {
+  margin-bottom: 10px;
+}
+
+.users-panel-header .eyebrow {
+  margin: 0;
 }
 
 .users-tab .panel-header h2 {
@@ -21,49 +25,8 @@
   color: var(--ink);
 }
 
-/* Compact coverage strip — lighter than the investigation workspace. */
-.users-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--sp-4) var(--sp-7);
-  min-width: 0;
-  padding: 0 2px var(--sp-4);
-  border-bottom: 1px solid var(--line);
-}
-
-.users-summary > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.users-summary span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.users-summary strong {
-  color: var(--ink);
-  font-size: clamp(18px, 1.8cqi, 22px);
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-}
-
 .users-workspace {
   min-width: 0;
-}
-
-.users-workspace-note {
-  max-width: 36ch;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-  text-align: right;
 }
 
 /* ---------- identity ---------- */
@@ -370,23 +333,11 @@
     padding: 0;
     list-style: none;
   }
-
-  .users-workspace-note {
-    text-align: left;
-  }
 }
 
 @container app-main (max-width: 560px) {
   .users-tab {
     padding-block: var(--sp-4) var(--sp-6);
     gap: var(--sp-4);
-  }
-
-  .users-summary {
-    gap: var(--sp-3) var(--sp-5);
-  }
-
-  .users-summary strong {
-    font-size: 18px;
   }
 }

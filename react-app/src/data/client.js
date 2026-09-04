@@ -113,6 +113,8 @@ export async function getRecords(scanId, filters = {}, page = 1) {
   const query = new URLSearchParams({ page: String(page) });
   setListQueryParameter(query, "states", filters.states);
   setListQueryParameter(query, "modules", filters.modules);
+  setListQueryParameter(query, "owners", filters.owners);
+  if (filters.q) query.set("q", String(filters.q).trim());
   const res = await fetch(
     `${FUNCTION_BASE_URL}/api/scans/${encodeURIComponent(scanId)}/records?${query.toString()}`,
     { credentials: "same-origin" }

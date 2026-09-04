@@ -36,15 +36,7 @@ export default function ModulesTab() {
     <div className="modules-tab">
       <section className="panel modules-panel">
         <div className="panel-header">
-          <div>
-            <p className="eyebrow">Modules</p>
-            <h1>Measured quality by module</h1>
-          </div>
-          <p className="modules-floor-note">
-            {measuredDomainOrder.length} of {DOMAIN_ORDER.length} domains measured. Scores based on fewer than{" "}
-            <span className="mono">{minObservations}</span> records display as
-            N/A. Unsupported or non-applicable domains remain unmeasured.
-          </p>
+          <p className="eyebrow">Modules</p>
         </div>
         <ModuleMatrix
           modules={visibleModules}

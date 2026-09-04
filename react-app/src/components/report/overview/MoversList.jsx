@@ -3,10 +3,8 @@ import { formatDelta } from "../../../utils/format";
 import "./MoversList.css";
 
 /**
- * Biggest score changes since the prior scan, mixing module- and
- * domain-level movers (they're different kinds of things - a module is a
- * CRM object type, a domain is a quality dimension - so each gets a small
- * type tag rather than being visually conflated).
+ * Biggest score changes since the prior comparable scan. Modules and users
+ * are mixed in one ranked list, so each row keeps a type tag.
  */
 export default function MoversList({ movers }) {
   if (!movers || movers.length === 0) {
@@ -20,7 +18,7 @@ export default function MoversList({ movers }) {
         const Arrow =
           direction === "up" ? ArrowUpRight : direction === "down" ? ArrowDownRight : Minus;
         return (
-          <li key={`${m.type}-${m.label}`} className="movers-item">
+          <li key={`${m.type}-${m.key || m.label}`} className="movers-item">
             <span className={`movers-arrow movers-arrow-${direction}`} aria-hidden="true">
               <Arrow strokeWidth={2} />
             </span>

@@ -1,12 +1,56 @@
 /* Horizontal insetting and the max-width come from the shared content
-   container; the title block comes from PageHeader. */
+   container; the title block comes from PageHeader. Compact overrides stay
+   scoped here so other screens keep the shared header rhythm. */
 .home-screen {
-  padding-block: var(--sp-6) var(--sp-8);
+  padding-block: var(--sp-5) var(--sp-6);
+}
+
+.home-screen .page-header {
+  align-items: flex-end;
+  gap: var(--sp-3) var(--sp-5);
+  margin-bottom: var(--sp-4);
+}
+
+.home-screen .page-header-text:empty {
+  display: none;
+}
+
+.home-screen .page-header-actions {
+  align-items: flex-end;
+  margin-left: auto;
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: var(--sp-2) var(--sp-3);
+  min-width: 0;
+}
+
+.home-actions-context {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.home-actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.home-screen .history-panel .panel-header {
+  margin-bottom: var(--sp-3);
 }
 
 .history-panel h2 {
   margin-top: 2px;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .history-count {
@@ -28,19 +72,22 @@
 
 .history-table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   font-size: 13px;
 }
 
 .history-table th,
 .history-table td {
-  padding: 11px 12px;
+  padding: 7px 10px;
   text-align: left;
+  vertical-align: middle;
   border-top: 1px solid var(--line);
 }
 
 .history-table thead th {
   border-top: 0;
+  padding-block: 6px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
@@ -54,7 +101,7 @@
 
 .history-status {
   display: inline-block;
-  padding: 4px 7px;
+  padding: 3px 7px;
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
   color: var(--ink-soft);
@@ -64,15 +111,26 @@
 
 .history-action {
   text-align: right !important;
+  white-space: nowrap;
 }
 
-.history-account-name,
+.history-account-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
 .history-account-email {
-  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.history-created {
+  color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 .history-modules {
-  max-width: 420px;
+  max-width: 280px;
 }
 
 .history-modules-toggle {
@@ -80,20 +138,14 @@
   background: transparent;
   color: var(--brand);
   cursor: pointer;
-  display: block;
+  display: inline;
   font: inherit;
-  margin-top: 4px;
+  margin-left: 6px;
   padding: 0;
 }
 
 .history-modules-toggle:hover {
   text-decoration: underline;
-}
-
-.history-account-email {
-  color: var(--muted);
-  font-size: 11px;
-  margin-top: 2px;
 }
 
 .history-empty,
@@ -103,7 +155,7 @@
 }
 
 .home-notice {
-  margin: calc(var(--sp-6) * -1 + var(--sp-2)) 0 var(--sp-4);
+  margin: 0 0 var(--sp-3);
   color: var(--ink-soft);
   font-size: 13px;
 }
@@ -112,6 +164,3 @@
   color: var(--risk);
   margin-bottom: var(--sp-3);
 }
-
-/* The header and the panel header both wrap on their own now (see
-   layout.css and primitives.css), so there is no breakpoint to maintain. */
