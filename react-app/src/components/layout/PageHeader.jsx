@@ -10,6 +10,7 @@ export function PageHeader({
   eyebrow,
   title,
   description,
+  meta,
   actions,
   className,
   children,
@@ -21,6 +22,7 @@ export function PageHeader({
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         {title && <h1>{title}</h1>}
         {description && <p className="page-header-description">{description}</p>}
+        {meta && <p className="page-header-meta">{meta}</p>}
         {children}
       </div>
       {actions && <div className="page-header-actions">{actions}</div>}

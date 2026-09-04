@@ -28,6 +28,7 @@ html,
 body,
 #root {
   height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -38,6 +39,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 h1,
@@ -49,7 +51,7 @@ h3 {
   color: var(--ink);
 }
 
-h1 { letter-spacing: -0.035em; }
+h1 { letter-spacing: -0.03em; }
 h2, h3 { letter-spacing: -0.02em; }
 
 p {
@@ -62,7 +64,8 @@ button {
 }
 
 input,
-select {
+select,
+textarea {
   font-family: var(--font-body);
 }
 
@@ -71,21 +74,33 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
-/* small-caps section label, used throughout - the lab-report "panel header" */
+/* section label — quiet metadata, not a decorative stamp */
 .eyebrow {
   font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.11em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.text-meta {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.text-body {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-soft);
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 ::selection {
@@ -97,6 +112,34 @@ select {
 :focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 80;
+  padding: 8px 12px;
+  background: var(--brand);
+  color: var(--on-brand);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-160%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+@media print {
+  html,
+  body,
+  #root {
+    overflow: visible;
+    height: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

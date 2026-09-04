@@ -28,7 +28,7 @@
   min-width: 0;
   height: auto;
   padding: 0;
-  gap: 4px;
+  gap: 0;
   border-radius: 0;
   background: transparent;
   overflow-x: auto;
@@ -37,32 +37,43 @@
 }
 
 .tab-nav-item {
+  position: relative;
   flex: 0 0 auto;
   height: auto;
   border: none;
-  border-radius: 999px;
-  padding: 9px 15px;
-  font-size: 14px;
-  font-weight: 650;
+  border-radius: 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--muted);
   background: transparent;
   box-shadow: none;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: color var(--duration-fast) var(--ease-out);
 }
 
-/* Radix's own underline pseudo-element; the pill treatment replaces it. */
+/* Replace the default pill / Radix underline with a hairline indicator. */
 .tab-nav-item::after {
-  display: none;
+  content: "";
+  position: absolute;
+  inset: auto 14px 0;
+  height: 2px;
+  width: auto;
+  background: transparent;
+  opacity: 1;
 }
 
 .tab-nav-item:hover {
-  color: var(--ink-soft);
-  background: var(--surface-sunken);
+  color: var(--ink);
+  background: transparent;
 }
 
 .tab-nav-item[data-state="active"] {
-  color: var(--brand-strong);
-  background: var(--brand-soft);
+  color: var(--ink);
+  background: transparent;
+}
+
+.tab-nav-item[data-state="active"]::after {
+  background: var(--brand);
 }
 
 @container app-main (max-width: 720px) {

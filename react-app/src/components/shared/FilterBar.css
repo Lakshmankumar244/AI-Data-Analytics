@@ -52,15 +52,18 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 7px 11px;
+  min-height: 32px;
+  padding: 6px 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink-soft);
   font-size: 13px;
   font-weight: 600;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
 }
 
 .filter-bar-back:hover {
@@ -91,8 +94,9 @@
 }
 
 .filter-bar-title-block h1 {
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.2;
+  font-weight: 600;
 }
 
 .filter-bar-subtitle {
@@ -266,10 +270,12 @@
 .filter-bar-action {
   background: none;
   border: none;
-  padding: 0;
+  min-height: 32px;
+  padding: 4px 6px;
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-soft);
+  border-radius: var(--radius-sm);
 }
 
 .filter-bar-action:hover {

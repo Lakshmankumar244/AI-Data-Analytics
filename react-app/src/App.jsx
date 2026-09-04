@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { AppProvider, useAppState, useAppDispatch } from "./state/AppContext";
 import * as api from "./data/client";
 import { AppShell as Shell, ContentContainer, MainContent } from "./components/layout";
-import PhaseRail from "./components/shared/PhaseRail";
 import ErrorState from "./components/shared/ErrorState";
 import SetupScreen from "./components/setup/SetupScreen";
 import RunningScreen from "./components/running/RunningScreen";
@@ -76,7 +75,7 @@ function AppShell() {
   }, [dispatch]);
 
   return (
-    <Shell rail={<PhaseRail phase={state.phase} />}>
+    <Shell>
       <MainContent>
         {state.phase === "setup" && <SetupScreen />}
         {state.phase === "home" && <HomeScreen />}

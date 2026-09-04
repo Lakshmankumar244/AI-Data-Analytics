@@ -1,8 +1,10 @@
 /*
-  Design direction: a diagnostic instrument, not a generic SaaS dashboard.
-  The product's own vocabulary is medical/lab ("health", "scan", "state"),
-  so the visual language borrows from a lab report: reference ranges,
-  precise monospace figures, small-caps section labels, clinical restraint.
+  Design direction: a premium data-intelligence workspace.
+
+  The product language is operational — scan, understand, investigate, fix —
+  so the visual system is restrained, hierarchical, and instrument-like.
+  Surfaces are distinguished by grouping and hairlines, not by stacking
+  rounded cards. Colour is reserved for status; chrome stays neutral.
 
   This file is the single source of truth for theme values. Everything else —
   the legacy component CSS, the Tailwind theme, and the shadcn/ui semantic
@@ -22,31 +24,39 @@
 :root {
   color-scheme: light;
 
-  /* type */
-  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
-  --font-body: "Inter", "IBM Plex Sans", system-ui, sans-serif;
+  /* type — IBM Plex is already loaded; it reads as an instrument, not a template */
+  --font-display: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  /* surface */
-  --paper: #f4f6fb;
+  /* surface hierarchy: paper (canvas) → surface (primary) → raised / sunken */
+  --paper: #f3f4f7;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --surface-sunken: #eef1f8;
-  --line: #e4e8f1;
-  --line-strong: #ccd3e3;
+  --surface-sunken: #eceef3;
+  --line: #e2e5ed;
+  --line-strong: #c5cad6;
 
   /* text */
-  --ink: #131a2c;
-  --ink-soft: #57607a;
-  --muted: #868fac;
+  --ink: #11141c;
+  --ink-soft: #4b5568;
+  --muted: #6b7385;
 
-  /* brand / primary — was teal (#0f766e), now blue to match target */
-  --brand: #3557dd;
-  --brand-soft: #eaeefc;
-  --brand-strong: #2743b0;
+  /* brand — same family as before, slightly deeper so chrome does not glow */
+  --brand: #2f4bc4;
+  --brand-soft: #e8edfa;
+  --brand-strong: #243aa0;
 
   /* text/icon colour that sits on top of a filled --brand or --risk surface */
   --on-brand: #ffffff;
+
+  /* informational (not a second brand — same family, used sparingly) */
+  --info: var(--brand);
+  --info-soft: var(--brand-soft);
+
+  /* disabled */
+  --disabled: #9aa1b2;
+  --disabled-soft: #eef0f4;
 
   /* org verdict band ramp (risk -> attention -> stable -> strong) */
   --risk: #c0362c;
@@ -67,8 +77,8 @@
   --state-inaccurate-soft: #fce7dc;
   --state-suspicious: #6b46c1;
   --state-suspicious-soft: #eee7fa;
-  --state-suspected-duplicate: #3557dd;
-  --state-suspected-duplicate-soft: #e7ebfb;
+  --state-suspected-duplicate: #2f4bc4;
+  --state-suspected-duplicate-soft: #e8edfa;
   --state-confirmed-duplicate: #c0362c;
   --state-confirmed-duplicate-soft: #fbeae8;
 
@@ -86,12 +96,17 @@
   --matrix-bad: #c0362c;
   --matrix-bad-soft: #fbeae8;
 
-  /* geometry — slightly larger radii, a touch more "dashboard" than "paper" */
-  --radius-sm: 10px;
-  --radius-md: 16px;
-  --radius-lg: 22px;
-  --shadow-card: 0 1px 2px rgba(19, 26, 44, 0.04), 0 10px 30px rgba(19, 26, 44, 0.05);
-  --shadow-float: 0 18px 50px rgba(19, 26, 44, 0.14);
+  /* geometry — tight, architectural. Cards are not bubbles. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-card: 0 1px 2px rgba(17, 20, 28, 0.04);
+  --shadow-float: 0 8px 24px rgba(17, 20, 28, 0.12);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-med: 180ms;
 
   /* spacing scale */
   --sp-1: 4px;
@@ -105,79 +120,77 @@
 }
 
 /*
-  Dark theme. Only the values that depend on the theme are restated — type,
-  radii and spacing are theme-independent and stay in :root.
+  Dark theme is designed, not inverted.
 
-  The hues are deliberately the same ones as the light ramp, lifted in
-  lightness so they read against a dark surface, and every "-soft" pair flips
-  from a pale tint to a deep tint. The semantics are unchanged: risk is still
-  red, attention amber, strong green, and the six record states keep their
-  one-family-per-problem-type mapping.
+  Canvas is near-black charcoal rather than navy. Surfaces lift in discrete
+  steps. Brand is a readable indigo on dark, not a neon invert of the light
+  brand. Semantic hues are the same families as light, lifted just enough
+  to keep contrast — they stay quiet so a healthy org does not look like a
+  rainbow dashboard.
 */
 .dark {
   color-scheme: dark;
 
-  /* surface */
-  --paper: #0a0f1e;
-  --surface: #121829;
-  --surface-raised: #1a2135;
-  --surface-sunken: #0e1424;
-  --line: #242c42;
-  --line-strong: #36405c;
+  --paper: #0b0d12;
+  --surface: #13151c;
+  --surface-raised: #1a1d27;
+  --surface-sunken: #0e1016;
+  --line: #262a36;
+  --line-strong: #3a3f50;
 
-  /* text */
-  --ink: #e9edf8;
-  --ink-soft: #a3abc2;
-  --muted: #7b849d;
+  --ink: #eceef4;
+  --ink-soft: #9aa1b3;
+  --muted: #6f7688;
 
-  /* brand / primary */
-  --brand: #7d97f4;
-  --brand-soft: #1b2444;
-  --brand-strong: #a9bcff;
+  --brand: #8b9cff;
+  --brand-soft: #1a2040;
+  --brand-strong: #c0c8ff;
 
-  --on-brand: #0a0f1e;
+  --on-brand: #0b0d12;
 
-  /* org verdict band ramp */
-  --risk: #ef8479;
-  --risk-soft: #3a1b19;
-  --attention: #dfa945;
-  --attention-soft: #362810;
+  --info: var(--brand);
+  --info-soft: var(--brand-soft);
+
+  --disabled: #5c6374;
+  --disabled-soft: #1a1d27;
+
+  --risk: #e07a72;
+  --risk-soft: #2f1817;
+  --attention: #d4a14a;
+  --attention-soft: #2c220f;
   --stable: #5fbfa8;
   --stable-soft: #12302b;
-  --strong: #4bd0a4;
+  --strong: #4ec9a0;
   --strong-soft: #103226;
 
-  /* six record states */
-  --state-proper: #4bd0a4;
+  --state-proper: #4ec9a0;
   --state-proper-soft: #103226;
-  --state-incomplete: #dfa945;
-  --state-incomplete-soft: #362810;
-  --state-inaccurate: #f2915c;
-  --state-inaccurate-soft: #392214;
+  --state-incomplete: #d4a14a;
+  --state-incomplete-soft: #2c220f;
+  --state-inaccurate: #e08a5a;
+  --state-inaccurate-soft: #2e1c12;
   --state-suspicious: #a98af0;
-  --state-suspicious-soft: #261d3e;
-  --state-suspected-duplicate: #7d97f4;
-  --state-suspected-duplicate-soft: #1b2444;
-  --state-confirmed-duplicate: #ef8479;
-  --state-confirmed-duplicate-soft: #3a1b19;
+  --state-suspicious-soft: #221a36;
+  --state-suspected-duplicate: #8b9cff;
+  --state-suspected-duplicate-soft: #1a2040;
+  --state-confirmed-duplicate: #e07a72;
+  --state-confirmed-duplicate-soft: #2f1817;
 
-  /* six-tier matrix cell ramp */
-  --matrix-excellent: #4bd0a4;
+  --matrix-excellent: #4ec9a0;
   --matrix-excellent-soft: #103226;
   --matrix-good: #5fbfa8;
   --matrix-good-soft: #12302b;
   --matrix-ok: #9aa3ba;
-  --matrix-ok-soft: #222939;
-  --matrix-fair: #dfa945;
-  --matrix-fair-soft: #362810;
-  --matrix-warn: #f2915c;
-  --matrix-warn-soft: #392214;
-  --matrix-bad: #ef8479;
-  --matrix-bad-soft: #3a1b19;
+  --matrix-ok-soft: #1c2030;
+  --matrix-fair: #d4a14a;
+  --matrix-fair-soft: #2c220f;
+  --matrix-warn: #e08a5a;
+  --matrix-warn-soft: #2e1c12;
+  --matrix-bad: #e07a72;
+  --matrix-bad-soft: #2f1817;
 
-  /* shadows need real black on a dark surface to read as depth */
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px rgba(0, 0, 0, 0.4);
-  --shadow-float: 0 18px 50px rgba(0, 0, 0, 0.6);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03);
+  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
 /*

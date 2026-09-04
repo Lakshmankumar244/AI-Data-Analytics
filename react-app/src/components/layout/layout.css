@@ -1,80 +1,456 @@
 /*
   Application shell and layout foundation.
 
-  Two rules drive everything in this file:
+  Two rules still drive everything in this file:
 
-  1. Nothing horizontal is measured against the viewport. The PhaseRail owns a
-     column of the shell grid, so `100vw` is always wider than the space the
-     content actually has (and on Windows it also includes the scrollbar).
-     Alignment is done with `margin-inline: auto` inside the main column and
-     gutters are sized in container query units, so every bar and every screen
-     lines up on the same edges no matter how wide the rail is.
+  1. Nothing horizontal is measured against the viewport for content
+     alignment. The sidebar owns a column of the shell, so `100vw` is always
+     wider than the space the content actually has. Alignment is done with
+     `margin-inline: auto` inside the main column and gutters are sized in
+     container query units.
 
-  2. Sticky offsets are never numbers. The FilterBar and the TabNav are stuck
-     as one group, so the tab row follows the real height of the filter row at
-     any zoom level or wrap state instead of a hardcoded `top`.
+  2. Sticky offsets are never numbers. FilterBar and TabNav stick together
+     as one group inside the scrolling main column, so the tab row follows
+     the real height of the filter row at any zoom or wrap state.
+
+  The shell itself is a viewport frame: sidebar + (header + scrolling main).
+  Page-level overflow is owned by `.app-main`, which is also the container
+  query context for `--app-gutter`.
 */
 
 :root {
-  /* Width of the PhaseRail column. Read by the rail itself and by anything
-     that needs to reason about the main column; set to 0 when it is hidden. */
-  --app-rail-width: 76px;
-
-  /* The single content column every screen aligns to. */
+  --app-rail-width: 232px;
+  --app-rail-collapsed: 64px;
+  --app-header-height: 56px;
   --app-content-max: 1480px;
-
-  /* Gutter between the content column and the edge of the main area.
-     `cqi` resolves against `.app-main`, so this shrinks with the space that
-     is actually available rather than with the viewport. */
   --app-gutter: clamp(16px, 3cqi, 40px);
-
-  /* Height reserved by the stuck header group. Not used for offsets - it only
-     feeds `scroll-margin-top` so in-page anchors clear the sticky bars. */
   --app-header-scroll-margin: 160px;
+}
+
+.app-shell-collapsed {
+  --app-rail-width: var(--app-rail-collapsed);
 }
 
 /* ---------- shell ---------- */
 
-/*
-  Flex rather than a two column grid: the rail removes itself at narrow widths
-  with `display: none`, and a grid would then promote the main column into the
-  rail's `auto` track and collapse it to its padding.
-*/
 .app-shell {
   display: flex;
   align-items: stretch;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  min-width: 0;
+  background: var(--paper);
 }
 
-/*
-  `container-type: inline-size` makes this the reference for every `cqi` in the
-  app. It applies layout and inline-size containment, neither of which creates
-  a scroll container, so `position: sticky` descendants still stick to the
-  viewport.
+.app-frame {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
 
-  `overflow-x: clip` is the backstop against page-level horizontal scrolling.
-  It has to be `clip` rather than `hidden`: `hidden` would turn this into a
-  scroll container and the sticky header would stick to it instead of to the
-  viewport, which pins the header in place permanently.
-*/
-/* `min-width: 0` is what lets this shrink past its content - it is the flex
-   equivalent of the grid's `minmax(0, 1fr)` and the reason a wide table
-   scrolls in its own box instead of widening the page. */
 .app-main {
   container-type: inline-size;
   container-name: app-main;
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
   overflow-x: clip;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ---------- sidebar ---------- */
+
+.app-nav-backdrop {
+  display: none;
+}
+
+.app-sidebar {
+  position: relative;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 var(--app-rail-width);
+  width: var(--app-rail-width);
+  min-width: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 16px 12px;
+}
+
+.app-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 20px;
+  padding: 0 4px;
+}
+
+.app-mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--brand);
+  color: var(--on-brand);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.app-sidebar-brand-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.app-sidebar-product {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.app-sidebar-product-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.app-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-sidebar-section + .app-sidebar-section {
+  margin-top: 18px;
+}
+
+.app-sidebar-heading {
+  margin: 0 8px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.app-sidebar-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-sidebar-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 550;
+  text-align: left;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.app-sidebar-item:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.app-sidebar-item-current {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.app-sidebar-item-current:hover {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.app-sidebar-item:disabled,
+.app-sidebar-item-static {
+  cursor: default;
+}
+
+.app-sidebar-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: inherit;
+}
+
+.app-sidebar-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-sidebar-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-sidebar-item-current-dot {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
+}
+
+.app-sidebar-spacer {
+  flex: 1 1 auto;
+  min-height: 16px;
+}
+
+.app-sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.app-sidebar-footer .theme-toggle {
+  width: 100%;
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
+  padding: 6px 8px;
+}
+
+.app-sidebar-footer .theme-toggle:hover {
+  background: var(--surface-sunken);
+}
+
+.app-sidebar-tooltip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+  padding: 5px 8px;
+  background: var(--ink);
+  color: var(--surface);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.app-sidebar-item:hover .app-sidebar-tooltip,
+.app-sidebar-item:focus-visible .app-sidebar-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.app-shell:not(.app-shell-collapsed) .app-sidebar-tooltip {
+  display: none;
+}
+
+.app-sidebar-close {
+  display: none;
+  margin-left: auto;
+}
+
+/* ---------- header ---------- */
+
+.app-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: var(--app-header-height);
+  min-width: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.app-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-5);
+  flex-wrap: wrap;
+  width: 100%;
+  padding-block: 10px;
+}
+
+.app-header-lead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-header-menu {
+  display: none;
+  flex: 0 0 auto;
+  width: 36px;
+  padding: 6px;
+}
+
+.app-header-context {
+  min-width: 0;
+}
+
+.app-header-kicker {
+  margin: 0;
+}
+
+.app-header-title {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.app-header-org {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  max-width: min(280px, 40cqi);
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.app-header-org-name,
+.app-header-org-user {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.app-header-org-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.app-header-org-user {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ---------- theme toggle ---------- */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 550;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.theme-toggle:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.theme-toggle-compact {
+  width: 36px;
+  padding: 6px;
+}
+
+.theme-toggle svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.app-sidebar-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.app-sidebar-collapse:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
 }
 
 /* ---------- content container ---------- */
 
-/*
-  The one horizontal alignment rule in the app. Used by the filter bar, the tab
-  bar and every screen body, which is what makes them share an edge.
-*/
 .content-container {
   width: 100%;
   max-width: var(--app-content-max);
@@ -83,36 +459,22 @@
   min-width: 0;
 }
 
-/* Bars supply their own vertical rhythm; this variant only handles the
-   horizontal axis so it can be dropped into a padded parent. */
 .content-container-flush {
   padding-inline: 0;
 }
 
 /* ---------- sticky header group ---------- */
 
-/*
-  FilterBar + TabNav stick together as a single element. This is the whole fix
-  for the old `top: 92px` on the tab nav: there is no second sticky element to
-  offset, so the tab row is correct whether the filter row is one line or four.
-*/
 .app-header-stack {
-  /*
-    Owned by the stack rather than by each bar so the short-viewport override
-    below reaches every bar at once. A bar that declared this on itself would
-    shadow the override.
-  */
   --app-bar-padding-block: 12px;
-
   position: sticky;
   top: 0;
   z-index: 20;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  /* Follows the theme instead of the old hardcoded light-mode rgba(). */
-  background: color-mix(in srgb, var(--paper) 88%, transparent);
-  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -122,14 +484,13 @@
   }
 }
 
-/*
-  Short viewports are what browser zoom produces: 1280x800 at 150% is a
-  853x533 CSS viewport. Tighten the bars rather than let them eat a third of
-  the screen, and only give up on sticky when there is genuinely no room.
-*/
 @media (max-height: 640px) {
   .app-header-stack {
     --app-bar-padding-block: 8px;
+  }
+
+  .app-header {
+    min-height: 48px;
   }
 }
 
@@ -145,10 +506,6 @@
 
 /* ---------- page header ---------- */
 
-/*
-  Wraps instead of switching layout at a breakpoint, so it degrades the same
-  way at a narrow window and at a zoomed-in wide one.
-*/
 .page-header {
   display: flex;
   flex-wrap: wrap;
@@ -174,6 +531,12 @@
   color: var(--ink-soft);
 }
 
+.page-header-meta {
+  margin-top: var(--sp-2);
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .page-header-actions {
   display: flex;
   flex-wrap: wrap;
@@ -189,10 +552,6 @@
 
 /* ---------- responsive grid ---------- */
 
-/*
-  `min()` inside `minmax()` is load-bearing: without it a track floor wider
-  than the container overflows instead of collapsing to a single column.
-*/
 .responsive-grid {
   display: grid;
   grid-template-columns: repeat(
@@ -203,15 +562,227 @@
   min-width: 0;
 }
 
-/* ---------- scrollable regions ---------- */
-
-/*
-  Tables and other wide content scroll inside their own box. Pairing this with
-  `min-width: 0` on the ancestors is what keeps the overflow local instead of
-  letting it propagate to the page.
-*/
 .scroll-region {
   overflow-x: auto;
   min-width: 0;
   overscroll-behavior-x: contain;
+}
+
+/* compact rail: icon-only. Applied when the user collapses the sidebar,
+   and forced below 1180 so a zoomed 1280 laptop still has a usable column. */
+.app-shell-collapsed .app-sidebar-brand-text,
+.app-shell-collapsed .app-sidebar-heading,
+.app-shell-collapsed .app-sidebar-label,
+.app-shell-collapsed .app-sidebar-item-current-dot,
+.app-shell-collapsed .app-sidebar-collapse-label,
+.app-shell-collapsed .theme-toggle-label,
+.app-shell-collapsed .app-sidebar-footer .theme-toggle-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-shell-collapsed .app-sidebar {
+  padding-inline: 10px;
+}
+
+.app-shell-collapsed .app-sidebar-brand {
+  justify-content: center;
+  padding: 0;
+}
+
+.app-shell-collapsed .app-sidebar-item,
+.app-shell-collapsed .app-sidebar-collapse,
+.app-shell-collapsed .app-sidebar-footer .theme-toggle {
+  justify-content: center;
+  padding-inline: 8px;
+}
+
+.app-shell-collapsed .app-sidebar-heading {
+  display: none;
+}
+
+@media (max-width: 1180px) {
+  :root {
+    --app-rail-width: var(--app-rail-collapsed);
+  }
+
+  .app-sidebar-brand-text,
+  .app-sidebar-heading,
+  .app-sidebar-label,
+  .app-sidebar-item-current-dot,
+  .app-sidebar-collapse-label,
+  .theme-toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .app-sidebar {
+    padding-inline: 10px;
+    align-items: stretch;
+  }
+
+  .app-sidebar-brand {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .app-sidebar-item,
+  .app-sidebar-collapse,
+  .app-sidebar .theme-toggle {
+    justify-content: center;
+    padding-inline: 8px;
+  }
+
+  .app-sidebar .theme-toggle {
+    width: 100%;
+  }
+
+  .app-sidebar-heading {
+    display: none;
+  }
+
+  .app-shell:not(.app-shell-collapsed) .app-sidebar-tooltip {
+    display: block;
+  }
+
+  .app-sidebar-collapse {
+    display: none;
+  }
+}
+
+/* narrow: sidebar becomes an overlay drawer so the content column is full width */
+@media (max-width: 760px) {
+  :root,
+  .app-shell-collapsed {
+    --app-rail-width: 0px;
+  }
+
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+    flex-basis: 232px;
+    width: min(232px, 86vw);
+    transform: translateX(-105%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform var(--duration-med) var(--ease-out);
+    box-shadow: none;
+    align-items: stretch;
+    padding: 16px 12px;
+  }
+
+  .app-shell-nav-open .app-sidebar {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+    box-shadow: var(--shadow-float);
+  }
+
+  .app-shell-nav-open .app-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    border: 0;
+    padding: 0;
+    background: color-mix(in srgb, var(--ink) 36%, transparent);
+  }
+
+  .app-header-menu,
+  .app-sidebar-close {
+    display: inline-flex;
+  }
+
+  /* drawer is always expanded — restore labels hidden by compact-rail rules */
+  .app-shell-collapsed .app-sidebar-brand-text,
+  .app-shell-collapsed .app-sidebar-heading,
+  .app-shell-collapsed .app-sidebar-label,
+  .app-shell-collapsed .app-sidebar-item-current-dot,
+  .app-shell-collapsed .app-sidebar-collapse-label,
+  .app-shell-collapsed .theme-toggle-label,
+  .app-sidebar-brand-text,
+  .app-sidebar-heading,
+  .app-sidebar-label,
+  .app-sidebar-item-current-dot,
+  .theme-toggle-label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
+  }
+
+  .app-shell-collapsed .app-sidebar-heading,
+  .app-sidebar-heading {
+    display: block;
+    margin: 0 8px 4px;
+  }
+
+  .app-sidebar-item,
+  .app-sidebar-collapse,
+  .app-sidebar .theme-toggle {
+    justify-content: flex-start;
+  }
+
+  .app-sidebar .theme-toggle {
+    width: 100%;
+  }
+
+  .app-sidebar-tooltip {
+    display: none !important;
+  }
+
+  .app-header-org {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-header-meta {
+    display: none;
+  }
+
+  .app-header-title {
+    max-width: 46vw;
+  }
+}
+
+@media print {
+  .app-sidebar,
+  .app-header,
+  .app-nav-backdrop {
+    display: none !important;
+  }
+
+  .app-shell,
+  .app-frame,
+  .app-main {
+    height: auto;
+    overflow: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar {
+    transition: none;
+  }
 }

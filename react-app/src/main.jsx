@@ -5,7 +5,6 @@ import { ThemeProvider } from "./theme/ThemeProvider.jsx";
 import "./styles/global.css";
 import "./components/shared/primitives.css";
 import "./components/layout/layout.css";
-// PhaseRail.css is co-located and self-imported by PhaseRail.jsx
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

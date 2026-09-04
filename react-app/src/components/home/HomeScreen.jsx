@@ -6,6 +6,7 @@ import { formatNumber } from "../../utils/format";
 import { ContentContainer, PageHeader } from "../layout";
 import Band from "../shared/Band";
 import Dropdown from "../shared/Dropdown";
+import LoadingState from "../shared/LoadingState";
 import "./HomeScreen.css";
 
 const COMPLETED_BAND = {
@@ -144,6 +145,14 @@ export default function HomeScreen() {
     } finally {
       setSwitchingConnection(false);
     }
+  }
+
+  if (connection === "loading") {
+    return (
+      <ContentContainer className="home-screen">
+        <LoadingState label="Restoring your account" />
+      </ContentContainer>
+    );
   }
 
   return (
