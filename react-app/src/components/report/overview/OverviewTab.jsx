@@ -1,43 +1,69 @@
 import { useMemo } from "react";
+import {
+  CalendarRange,
+  CircleCheck,
+  Layers,
+  TriangleAlert,
+  Users,
+} from "lucide-react";
 import { useAppState, useActions } from "../../../state/AppContext";
 import { summarizeModuleAnalytics } from "../../../data/analyticsAdapter";
 import ScoreGauge from "../../shared/ScoreGauge";
 import StateBreakdown from "../../shared/StateBreakdown";
-import Band from "../../shared/Band";
 import DomainScoreBars from "./DomainScoreBars";
 import MoversList from "./MoversList";
-import { orgBand } from "../../../utils/bands";
+import OverviewEmptyNote from "./OverviewEmptyNote";
+import OverviewKpiCard from "./OverviewKpiCard";
+import { RECORD_STATES } from "../../../utils/bands";
 import { formatNumber } from "../../../utils/format";
-import {
-  MOCK_CREATED_IN_PERIOD,
-  MOCK_GAUGE_META,
-  MOCK_KEY_FINDINGS,
-  MOCK_MOVERS,
-  MOCK_STATE_BREAKDOWN,
-  MOCK_STAT_CARDS,
-} from "./overviewMockData";
+import { Button } from "@/components/ui/button";
+import { ResponsiveGrid } from "../../layout";
 import "./OverviewTab.css";
 
-const FINDING_BANDS = {
-  critical: {
-    id: "critical",
-    label: "Critical",
-    color: "var(--risk)",
-    soft: "var(--risk-soft)",
-  },
-  high: {
-    id: "high",
-    label: "High",
-    color: "var(--attention)",
-    soft: "var(--attention-soft)",
-  },
-  medium: {
-    id: "medium",
-    label: "Medium",
-    color: "var(--stable)",
-    soft: "var(--stable-soft)",
-  },
+const CLOCK_LABELS = {
+  created: "Created date",
+  modified: "Modified date",
+  Created_Time: "Created date",
+  Modified_Time: "Modified date",
 };
+
+const GENERIC_FINDING =
+  "No completeness or validity issues were detected in this module.";
+
+function formatContextDate(value) {
+  if (!value) return null;
+  const normalized = String(value).replace(
+    /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?::\d{3})?/,
+    "$1T$2"
+  );
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime())
+    ? String(value)
+    : new Intl.DateTimeFormat("en-IN", {
+        dateStyle: "medium",
+      }).format(date);
+}
+
+function attentionFromBreakdown(breakdown) {
+  if (!breakdown) return null;
+  return RECORD_STATES.filter((state) => state.id !== "proper").reduce(
+    (sum, state) => sum + (breakdown[state.id] ?? 0),
+    0
+  );
+}
+
+function findingsFromModules(moduleFindings = [], filterModules = []) {
+  return moduleFindings
+    .filter(
+      (module) =>
+        !filterModules.length || filterModules.includes(module.apiName)
+    )
+    .flatMap((module) =>
+      (module.recommendations ?? [])
+        .filter((text) => text && text !== GENERIC_FINDING)
+        .map((text) => ({ module: module.label, text }))
+    );
+}
 
 export default function OverviewTab() {
   const { scan, focusState, filterModules } = useAppState();
@@ -64,13 +90,28 @@ export default function OverviewTab() {
     domainScores,
     movers,
   } = scopedScan;
-  const stateBreakdownIsPreview = !stateBreakdown;
-  const displayedStateBreakdown = stateBreakdown ?? MOCK_STATE_BREAKDOWN;
-  const moversArePreview = !movers?.length;
-  const displayedMovers = moversArePreview ? MOCK_MOVERS : movers;
-  const availableModuleCount =
-    filterModules.length || scopedScan.moduleAnalytics?.length || 0;
-  const moduleCount = availableModuleCount || MOCK_GAUGE_META.modules;
+
+  const moduleCount =
+    filterModules.length ||
+    scopedScan.moduleAnalytics?.length ||
+    scopedScan.moduleFindings?.length ||
+    0;
+  const cleanRecords = stateBreakdown ? (stateBreakdown.proper ?? 0) : null;
+  const attentionRecords = attentionFromBreakdown(stateBreakdown);
+  const findings = findingsFromModules(
+    scopedScan.moduleFindings,
+    filterModules
+  );
+  const reportContext = scopedScan.reportContext;
+  const periodFrom = formatContextDate(reportContext?.fromUtc);
+  const periodTo = formatContextDate(reportContext?.toUtc);
+  const clockLabel = reportContext?.clock
+    ? CLOCK_LABELS[reportContext.clock] || reportContext.clock
+    : null;
+  const depthLabel = reportContext?.depth
+    ? String(reportContext.depth).replace(/^./, (letter) => letter.toUpperCase())
+    : null;
+  const hasPeriodFacts = Boolean(periodFrom || periodTo || clockLabel || depthLabel);
 
   return (
     <div className="overview-tab">
@@ -80,91 +121,128 @@ export default function OverviewTab() {
             {scan.reuseNotice}
           </div>
         )}
-        <div className="panel-header">
-          <div>
+        <div className="overview-hero">
+          <div className="overview-hero-copy">
             <p className="eyebrow">Measured quality score</p>
             <h1>{formatNumber(recordsInScope)} records checked</h1>
+            <p className="overview-hero-lede">
+              {moduleCount > 0
+                ? `Overall health for the modules in this report across ${formatNumber(moduleCount)} ${moduleCount === 1 ? "module" : "modules"}.`
+                : "Overall health for the modules in this report."}
+            </p>
+            <ul className="overview-hero-facts">
+              <li>
+                <span>Checked</span>
+                <strong className="mono">{formatNumber(recordsInScope)}</strong>
+              </li>
+              <li>
+                <span>Modules</span>
+                <strong className="mono">{formatNumber(moduleCount)}</strong>
+              </li>
+              <li>
+                <span>Coverage</span>
+                <strong className="mono">
+                  {formatNumber(measuredPoints)}/{formatNumber(possiblePoints)}
+                </strong>
+              </li>
+            </ul>
           </div>
-        </div>
-        <ScoreGauge
-          score={overallScore}
-          priorScore={priorScore}
-          measuredPoints={measuredPoints}
-          possiblePoints={possiblePoints}
-          unmeasuredDomains={unmeasuredDomains}
-        />
-        <div className="overview-gauge-stats" aria-label="Scan summary">
-          <div>
-            <span>Checked</span>
-            <strong className="mono">{formatNumber(recordsInScope)}</strong>
-          </div>
-          <div>
-            <span>Duplicates</span>
-            <strong className="mono">
-              {formatNumber(MOCK_GAUGE_META.duplicates)}
-            </strong>
-          </div>
-          <div>
-            <span>Modules</span>
-            <strong className="mono">{formatNumber(moduleCount)}</strong>
-          </div>
+          <ScoreGauge
+            score={overallScore}
+            priorScore={priorScore}
+            measuredPoints={measuredPoints}
+            possiblePoints={possiblePoints}
+            unmeasuredDomains={unmeasuredDomains}
+          />
         </div>
       </section>
 
-      <section className="panel overview-stats-panel">
+      <section className="panel overview-snapshot-panel">
         <div className="panel-header">
-          <p className="eyebrow">Quality snapshot</p>
-          <p className="eyebrow overview-preview-label">(preview data)</p>
+          <div>
+            <p className="eyebrow">Quality snapshot</p>
+            <h2>Where attention is needed</h2>
+          </div>
         </div>
-        <div className="overview-stat-grid">
-          {MOCK_STAT_CARDS.map((stat) => {
-            const band = orgBand(stat.score);
-            return (
-              <article
-                key={stat.id}
-                className={`overview-stat overview-stat-${stat.id}`}
-                style={{
-                  "--overview-stat-color": band.color,
-                  "--overview-stat-soft": band.soft,
-                }}
-              >
-                <span>{stat.label}</span>
-                <strong className="mono">{formatNumber(stat.value)}</strong>
-              </article>
-            );
-          })}
-        </div>
+        <ResponsiveGrid min="168px" gap="var(--sp-3)" className="overview-kpi-grid">
+          <OverviewKpiCard
+            label="Clean records"
+            value={cleanRecords}
+            tone="strong"
+            icon={CircleCheck}
+            hint={
+              cleanRecords === null
+                ? "Record-level classification is not included in the current aggregate scan."
+                : "Records currently classified as proper."
+            }
+          />
+          <OverviewKpiCard
+            label="Need attention"
+            value={attentionRecords}
+            tone="attention"
+            icon={TriangleAlert}
+            hint={
+              attentionRecords === null
+                ? "Record-level classification is not included in the current aggregate scan."
+                : "Records in an incomplete, inaccurate, suspicious, or duplicate state."
+            }
+          />
+          <OverviewKpiCard
+            label="Users needing help"
+            value={null}
+            tone="neutral"
+            icon={Users}
+            hint="User-level help ranking is not available on this scan."
+          />
+          <OverviewKpiCard
+            label="Modules in scope"
+            value={moduleCount}
+            tone="neutral"
+            icon={Layers}
+            hint="Modules included in the current report view."
+          />
+        </ResponsiveGrid>
       </section>
 
       <div className="overview-primary-grid">
         <section className="panel">
           <div className="panel-header">
-            <p className="eyebrow">Record states</p>
-            <div className="overview-panel-actions">
-              {stateBreakdownIsPreview && (
-                <p className="eyebrow overview-preview-label">(preview data)</p>
-              )}
-              {focusState && (
-                <button
-                  type="button"
-                  className="overview-clear-focus"
-                  onClick={() => setFilter({ focusState: null })}
-                >
-                  Clear focus
-                </button>
-              )}
+            <div>
+              <p className="eyebrow">Record states</p>
+              <h2>How records are classified</h2>
             </div>
+            {focusState && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="overview-clear-focus"
+                onClick={() => setFilter({ focusState: null })}
+              >
+                Clear focus
+              </Button>
+            )}
           </div>
-          <StateBreakdown
-            breakdown={displayedStateBreakdown}
-            focusState={focusState}
-            onFocus={(id) => setFilter({ focusState: id })}
-          />
+          {stateBreakdown ? (
+            <StateBreakdown
+              breakdown={stateBreakdown}
+              focusState={focusState}
+              onFocus={(id) => setFilter({ focusState: id })}
+            />
+          ) : (
+            <OverviewEmptyNote>
+              Record-level classification is not included in the current aggregate
+              scan.
+            </OverviewEmptyNote>
+          )}
         </section>
 
         <section className="panel">
           <div className="panel-header">
-            <p className="eyebrow">Scores by area</p>
+            <div>
+              <p className="eyebrow">Health by area</p>
+              <h2>Scores by quality dimension</h2>
+            </div>
           </div>
           <DomainScoreBars
             domainScores={domainScores}
@@ -176,61 +254,74 @@ export default function OverviewTab() {
       <div className="overview-insights-grid">
         <section className="panel overview-created-panel">
           <div className="panel-header">
-            <p className="eyebrow">Created in period</p>
-            <p className="eyebrow overview-preview-label">(preview data)</p>
+            <div>
+              <p className="eyebrow">Created in period</p>
+              <h2>Scan window</h2>
+            </div>
+            <CalendarRange className="overview-panel-icon" aria-hidden="true" />
           </div>
-          <div
-            className="overview-created-chart"
-            aria-label="Created in period score chart"
-          >
-            {MOCK_CREATED_IN_PERIOD.map((period) => {
-              const band = orgBand(period.score);
-              return (
-                <div className="overview-created-column" key={period.label}>
-                  <span className="mono overview-created-value">
-                    {period.score}
-                  </span>
-                  <div className="overview-created-track">
-                    <span
-                      className="overview-created-bar"
-                      style={{
-                        height: `${period.score}%`,
-                        background: band.color,
-                      }}
-                    />
-                  </div>
-                  <span className="mono overview-created-label">
-                    {period.label}
-                  </span>
+          {hasPeriodFacts ? (
+            <dl className="overview-period-facts">
+              {(periodFrom || periodTo) && (
+                <div>
+                  <dt>Period</dt>
+                  <dd className="mono">
+                    {periodFrom || "—"} – {periodTo || "—"}
+                  </dd>
                 </div>
-              );
-            })}
-          </div>
+              )}
+              {clockLabel && (
+                <div>
+                  <dt>Attribution</dt>
+                  <dd>{clockLabel}</dd>
+                </div>
+              )}
+              {depthLabel && (
+                <div>
+                  <dt>Depth</dt>
+                  <dd>{depthLabel}</dd>
+                </div>
+              )}
+            </dl>
+          ) : (
+            <OverviewEmptyNote>
+              Period details are not attached to this report.
+            </OverviewEmptyNote>
+          )}
         </section>
 
         <section className="panel">
           <div className="panel-header">
-            <p className="eyebrow">Biggest changes</p>
-            {moversArePreview && (
-              <p className="eyebrow overview-preview-label">(preview data)</p>
-            )}
+            <div>
+              <p className="eyebrow">Biggest changes</p>
+              <h2>Since the last check</h2>
+            </div>
           </div>
-          <MoversList movers={displayedMovers} />
+          <MoversList movers={movers} />
         </section>
 
         <section className="panel">
           <div className="panel-header">
-            <p className="eyebrow">Key findings</p>
-            <p className="eyebrow overview-preview-label">(preview data)</p>
+            <div>
+              <p className="eyebrow">Key findings</p>
+              <h2>Issues already measured</h2>
+            </div>
           </div>
-          <ul className="overview-findings-list">
-            {MOCK_KEY_FINDINGS.map((finding) => (
-              <li key={`${finding.severity}-${finding.text}`}>
-                <Band band={FINDING_BANDS[finding.severity]} />
-                <span>{finding.text}</span>
-              </li>
-            ))}
-          </ul>
+          {findings.length > 0 ? (
+            <ul className="overview-findings-list">
+              {findings.map((finding) => (
+                <li key={`${finding.module}-${finding.text}`}>
+                  <span className="overview-finding-module">{finding.module}</span>
+                  <span>{finding.text}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <OverviewEmptyNote>
+              No completeness or validity findings are available for the modules
+              in this view.
+            </OverviewEmptyNote>
+          )}
         </section>
       </div>
     </div>

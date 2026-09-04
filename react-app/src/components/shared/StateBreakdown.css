@@ -2,14 +2,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
+  min-width: 0;
 }
 
 .state-breakdown-bar {
   display: flex;
-  height: 20px;
-  border-radius: var(--radius-sm);
+  height: 14px;
+  border-radius: 999px;
   overflow: hidden;
   border: 1px solid var(--line);
+  background: var(--surface-sunken);
 }
 
 .state-segment {
@@ -38,41 +40,55 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2) var(--sp-4);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  gap: var(--sp-2);
 }
 
 .state-legend-item {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  background: none;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  background: var(--surface-sunken);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  padding: 4px 6px;
+  padding: 8px 10px;
   font-size: 13px;
   color: var(--ink-soft);
+  text-align: left;
 }
 
 .state-legend-item:hover {
-  background: var(--surface-sunken);
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface-sunken) 70%, var(--surface));
 }
 
 .state-legend-item-focused {
   border-color: var(--line-strong);
-  background: var(--surface-sunken);
+  background: var(--surface);
   color: var(--ink);
+  box-shadow: var(--shadow-card);
 }
 
 .state-legend-swatch {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
   flex-shrink: 0;
+}
+
+.state-legend-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .state-legend-count {
   font-size: 12px;
   color: var(--muted);
+  font-weight: 650;
 }

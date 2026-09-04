@@ -1,23 +1,33 @@
 .score-bar-row {
   display: grid;
-  grid-template-columns: 140px 1fr 36px;
+  grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr) 2.25rem;
   align-items: center;
   gap: var(--sp-3);
-  padding: 9px 0;
+  padding: 11px 0;
+  min-width: 0;
+}
+
+.score-bar-row + .score-bar-row {
+  border-top: 1px solid var(--line);
 }
 
 .score-bar-label {
   font-size: 13px;
   font-weight: 500;
   color: var(--ink-soft);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .score-bar-track {
-  height: 7px;
+  height: 8px;
   border-radius: 999px;
   background: var(--surface-sunken);
   overflow: hidden;
   position: relative;
+  min-width: 0;
 }
 
 .score-bar-fill {
@@ -32,9 +42,6 @@
   text-align: right;
   font-weight: 650;
 }
-@media (max-width: 520px) {
-  .score-bar-row { grid-template-columns: 110px 1fr 30px; gap: 8px; }
-}
 
 .score-bar-row-na {
   cursor: help;
@@ -46,8 +53,9 @@
 
 .score-bar-na-text {
   position: absolute;
-  left: 0;
-  top: -1px;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 11px;
   color: var(--muted);
   font-style: italic;
@@ -55,4 +63,17 @@
 
 .score-bar-row-na .score-bar-value {
   color: var(--muted);
+}
+
+@container app-main (max-width: 480px) {
+  .score-bar-row {
+    grid-template-columns: minmax(0, 1fr) 2.25rem;
+    grid-template-rows: auto auto;
+    gap: var(--sp-2);
+  }
+
+  .score-bar-label {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
 }

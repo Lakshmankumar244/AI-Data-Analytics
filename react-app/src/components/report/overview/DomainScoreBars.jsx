@@ -8,7 +8,7 @@ export default function DomainScoreBars({ domainScores, unmeasuredDomains = [] }
 
   return (
     <div className="domain-score-bars">
-      {domainScores.filter((domain) => domain.applicable).map((d) => (
+      {(domainScores ?? []).filter((domain) => domain.applicable).map((d) => (
         <ScoreBar
           key={d.domain}
           label={DOMAIN_LABELS[d.domain] ?? d.domain}
