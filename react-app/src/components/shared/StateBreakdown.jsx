@@ -46,9 +46,12 @@ export default function StateBreakdown({ breakdown, focusState, onFocus }) {
                 onClick={() => onFocus?.(isFocused ? null : s.id)}
                 aria-pressed={isFocused}
               >
-                <span className="state-legend-swatch" style={{ background: s.color }} />
+                  <span className="state-legend-swatch" style={{ background: s.color }} />
                 <span className="state-legend-label">{s.label}</span>
                 <span className="state-legend-count mono">{formatNumber(count)}</span>
+                <span className="state-legend-pct mono">
+                  {total > 0 ? `${((count / total) * 100).toFixed(1)}%` : "—"}
+                </span>
               </button>
             </li>
           );

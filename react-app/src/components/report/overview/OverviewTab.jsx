@@ -1,23 +1,25 @@
 import { useMemo } from "react";
-import {
-  CalendarRange,
-  CircleCheck,
-  Layers,
-  TriangleAlert,
-  Users,
-} from "lucide-react";
 import { useAppState, useActions } from "../../../state/AppContext";
 import { summarizeModuleAnalytics } from "../../../data/analyticsAdapter";
-import ScoreGauge from "../../shared/ScoreGauge";
 import StateBreakdown from "../../shared/StateBreakdown";
 import DomainScoreBars from "./DomainScoreBars";
 import MoversList from "./MoversList";
 import OverviewEmptyNote from "./OverviewEmptyNote";
-import OverviewKpiCard from "./OverviewKpiCard";
-import { RECORD_STATES } from "../../../utils/bands";
-import { formatNumber } from "../../../utils/format";
+import OverviewHealthHero from "./OverviewHealthHero";
+import OverviewSignals from "./OverviewSignals";
+import OverviewEvidenceStrip from "./OverviewEvidenceStrip";
+import OverviewCreatedPeriod from "./OverviewCreatedPeriod";
+import OverviewFindings from "./OverviewFindings";
+import OverviewCoverageNotice from "./OverviewCoverageNotice";
+import {
+  attentionFromBreakdown,
+  dominantIssue,
+  duplicateCountFromModules,
+  findingsFromModules,
+  shareOf,
+} from "./overviewModel";
+import { formatReportDate } from "../../../utils/format";
 import { Button } from "@/components/ui/button";
-import { ResponsiveGrid } from "../../layout";
 import "./OverviewTab.css";
 
 const CLOCK_LABELS = {
@@ -27,47 +29,9 @@ const CLOCK_LABELS = {
   Modified_Time: "Modified date",
 };
 
-const GENERIC_FINDING =
-  "No completeness or validity issues were detected in this module.";
-
-function formatContextDate(value) {
-  if (!value) return null;
-  const normalized = String(value).replace(
-    /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?::\d{3})?/,
-    "$1T$2"
-  );
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime())
-    ? String(value)
-    : new Intl.DateTimeFormat("en-IN", {
-        dateStyle: "medium",
-      }).format(date);
-}
-
-function attentionFromBreakdown(breakdown) {
-  if (!breakdown) return null;
-  return RECORD_STATES.filter((state) => state.id !== "proper").reduce(
-    (sum, state) => sum + (breakdown[state.id] ?? 0),
-    0
-  );
-}
-
-function findingsFromModules(moduleFindings = [], filterModules = []) {
-  return moduleFindings
-    .filter(
-      (module) =>
-        !filterModules.length || filterModules.includes(module.apiName)
-    )
-    .flatMap((module) =>
-      (module.recommendations ?? [])
-        .filter((text) => text && text !== GENERIC_FINDING)
-        .map((text) => ({ module: module.label, text }))
-    );
-}
-
 export default function OverviewTab() {
   const { scan, focusState, filterModules } = useAppState();
-  const { setFilter } = useActions();
+  const { setFilter, setTab } = useActions();
 
   const scopedScan = useMemo(() => {
     if (!scan || !filterModules.length) return scan;
@@ -76,6 +40,14 @@ export default function OverviewTab() {
     );
     return { ...scan, ...summarizeModuleAnalytics(selected) };
   }, [filterModules, scan]);
+
+  const scopedModules = useMemo(() => {
+    if (!scopedScan?.moduleAnalytics) return [];
+    if (!filterModules.length) return scopedScan.moduleAnalytics;
+    return scopedScan.moduleAnalytics.filter((module) =>
+      filterModules.includes(module.moduleApiName)
+    );
+  }, [filterModules, scopedScan]);
 
   if (!scopedScan) return null;
 
@@ -98,130 +70,84 @@ export default function OverviewTab() {
     0;
   const cleanRecords = stateBreakdown ? (stateBreakdown.proper ?? 0) : null;
   const attentionRecords = attentionFromBreakdown(stateBreakdown);
-  const findings = findingsFromModules(
-    scopedScan.moduleFindings,
-    filterModules
-  );
+  const suspiciousRecords = stateBreakdown ? (stateBreakdown.suspicious ?? 0) : null;
+  const findings = findingsFromModules(scopedScan.moduleFindings, filterModules);
+  const duplicateCount = duplicateCountFromModules(scopedModules);
+  const explanation = dominantIssue({
+    stateBreakdown,
+    domainScores,
+    recordsInScope,
+  });
   const reportContext = scopedScan.reportContext;
-  const periodFrom = formatContextDate(reportContext?.fromUtc);
-  const periodTo = formatContextDate(reportContext?.toUtc);
+  const periodFrom = formatReportDate(reportContext?.fromUtc);
+  const periodTo = formatReportDate(reportContext?.toUtc);
   const clockLabel = reportContext?.clock
     ? CLOCK_LABELS[reportContext.clock] || reportContext.clock
     : null;
   const depthLabel = reportContext?.depth
     ? String(reportContext.depth).replace(/^./, (letter) => letter.toUpperCase())
     : null;
-  const hasPeriodFacts = Boolean(periodFrom || periodTo || clockLabel || depthLabel);
 
   return (
     <div className="overview-tab">
-      <section className="panel overview-score-panel">
-        {scan.reuseNotice && (
-          <div className="overview-reuse-notice" role="status">
-            {scan.reuseNotice}
-          </div>
-        )}
-        <div className="overview-hero">
-          <div className="overview-hero-copy">
-            <p className="eyebrow">Measured quality score</p>
-            <h1>{formatNumber(recordsInScope)} records checked</h1>
-            <p className="overview-hero-lede">
-              {moduleCount > 0
-                ? `Overall health for the modules in this report across ${formatNumber(moduleCount)} ${moduleCount === 1 ? "module" : "modules"}.`
-                : "Overall health for the modules in this report."}
-            </p>
-            <ul className="overview-hero-facts">
-              <li>
-                <span>Checked</span>
-                <strong className="mono">{formatNumber(recordsInScope)}</strong>
-              </li>
-              <li>
-                <span>Modules</span>
-                <strong className="mono">{formatNumber(moduleCount)}</strong>
-              </li>
-              <li>
-                <span>Coverage</span>
-                <strong className="mono">
-                  {formatNumber(measuredPoints)}/{formatNumber(possiblePoints)}
-                </strong>
-              </li>
-            </ul>
-          </div>
-          <ScoreGauge
-            score={overallScore}
-            priorScore={priorScore}
-            measuredPoints={measuredPoints}
-            possiblePoints={possiblePoints}
-            unmeasuredDomains={unmeasuredDomains}
-          />
-        </div>
-      </section>
+      <div className="overview-executive">
+        <OverviewHealthHero
+          overallScore={overallScore}
+          priorScore={priorScore}
+          measuredPoints={measuredPoints}
+          possiblePoints={possiblePoints}
+          unmeasuredDomains={unmeasuredDomains}
+          explanation={explanation}
+          reuseNotice={scan.reuseNotice}
+        />
+        <OverviewSignals
+          cleanRecords={cleanRecords}
+          attentionRecords={attentionRecords}
+          suspiciousRecords={suspiciousRecords}
+          cleanShare={shareOf(cleanRecords, recordsInScope)}
+          attentionShare={shareOf(attentionRecords, recordsInScope)}
+          suspiciousShare={shareOf(suspiciousRecords, recordsInScope)}
+          onOpenUsers={() => setTab("users")}
+        />
+      </div>
 
-      <section className="panel overview-snapshot-panel">
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">Quality snapshot</p>
-            <h2>Where attention is needed</h2>
-          </div>
-        </div>
-        <ResponsiveGrid min="168px" gap="var(--sp-3)" className="overview-kpi-grid">
-          <OverviewKpiCard
-            label="Clean records"
-            value={cleanRecords}
-            tone="strong"
-            icon={CircleCheck}
-            hint={
-              cleanRecords === null
-                ? "Record-level classification is not included in the current aggregate scan."
-                : "Records currently classified as proper."
-            }
-          />
-          <OverviewKpiCard
-            label="Need attention"
-            value={attentionRecords}
-            tone="attention"
-            icon={TriangleAlert}
-            hint={
-              attentionRecords === null
-                ? "Record-level classification is not included in the current aggregate scan."
-                : "Records in an incomplete, inaccurate, suspicious, or duplicate state."
-            }
-          />
-          <OverviewKpiCard
-            label="Users needing help"
-            value={null}
-            tone="neutral"
-            icon={Users}
-            hint="User-level help ranking is not available on this scan."
-          />
-          <OverviewKpiCard
-            label="Modules in scope"
-            value={moduleCount}
-            tone="neutral"
-            icon={Layers}
-            hint="Modules included in the current report view."
-          />
-        </ResponsiveGrid>
-      </section>
+      <OverviewEvidenceStrip
+        recordsInScope={recordsInScope}
+        duplicateCount={duplicateCount}
+        moduleCount={moduleCount}
+        measuredPoints={measuredPoints}
+        possiblePoints={possiblePoints}
+      />
 
-      <div className="overview-primary-grid">
+      <div className="overview-quality">
         <section className="panel">
           <div className="panel-header">
             <div>
               <p className="eyebrow">Record states</p>
               <h2>How records are classified</h2>
             </div>
-            {focusState && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="overview-clear-focus"
-                onClick={() => setFilter({ focusState: null })}
-              >
-                Clear focus
-              </Button>
-            )}
+            <div className="overview-panel-actions">
+              {focusState && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFilter({ focusState: null })}
+                >
+                  Clear focus
+                </Button>
+              )}
+              {stateBreakdown && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTab("records")}
+                >
+                  Investigate records
+                </Button>
+              )}
+            </div>
           </div>
           {stateBreakdown ? (
             <StateBreakdown
@@ -231,8 +157,8 @@ export default function OverviewTab() {
             />
           ) : (
             <OverviewEmptyNote>
-              Record-level classification is not included in the current aggregate
-              scan.
+              Record-level classification is not included in the current
+              aggregate scan.
             </OverviewEmptyNote>
           )}
         </section>
@@ -240,8 +166,8 @@ export default function OverviewTab() {
         <section className="panel">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Health by area</p>
-              <h2>Scores by quality dimension</h2>
+              <p className="eyebrow">Quality dimensions</p>
+              <h2>Scores by area</h2>
             </div>
           </div>
           <DomainScoreBars
@@ -251,79 +177,31 @@ export default function OverviewTab() {
         </section>
       </div>
 
-      <div className="overview-insights-grid">
-        <section className="panel overview-created-panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Created in period</p>
-              <h2>Scan window</h2>
-            </div>
-            <CalendarRange className="overview-panel-icon" aria-hidden="true" />
-          </div>
-          {hasPeriodFacts ? (
-            <dl className="overview-period-facts">
-              {(periodFrom || periodTo) && (
-                <div>
-                  <dt>Period</dt>
-                  <dd className="mono">
-                    {periodFrom || "—"} – {periodTo || "—"}
-                  </dd>
-                </div>
-              )}
-              {clockLabel && (
-                <div>
-                  <dt>Attribution</dt>
-                  <dd>{clockLabel}</dd>
-                </div>
-              )}
-              {depthLabel && (
-                <div>
-                  <dt>Depth</dt>
-                  <dd>{depthLabel}</dd>
-                </div>
-              )}
-            </dl>
-          ) : (
-            <OverviewEmptyNote>
-              Period details are not attached to this report.
-            </OverviewEmptyNote>
-          )}
-        </section>
+      <div className="overview-context">
+        <OverviewCreatedPeriod
+          periodFrom={periodFrom}
+          periodTo={periodTo}
+          clockLabel={clockLabel}
+          depthLabel={depthLabel}
+        />
 
         <section className="panel">
           <div className="panel-header">
             <div>
-              <p className="eyebrow">Biggest changes</p>
+              <p className="eyebrow">Biggest movers</p>
               <h2>Since the last check</h2>
             </div>
           </div>
           <MoversList movers={movers} />
         </section>
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Key findings</p>
-              <h2>Issues already measured</h2>
-            </div>
-          </div>
-          {findings.length > 0 ? (
-            <ul className="overview-findings-list">
-              {findings.map((finding) => (
-                <li key={`${finding.module}-${finding.text}`}>
-                  <span className="overview-finding-module">{finding.module}</span>
-                  <span>{finding.text}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <OverviewEmptyNote>
-              No completeness or validity findings are available for the modules
-              in this view.
-            </OverviewEmptyNote>
-          )}
-        </section>
+        <OverviewFindings findings={findings} />
       </div>
+
+      <OverviewCoverageNotice
+        domainScores={domainScores}
+        unmeasuredDomains={unmeasuredDomains}
+      />
     </div>
   );
 }

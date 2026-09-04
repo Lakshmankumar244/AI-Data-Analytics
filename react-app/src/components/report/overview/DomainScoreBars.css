@@ -1,25 +1,28 @@
 .domain-score-bars {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-4);
   min-width: 0;
 }
 
-.domain-score-coverage {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
+.domain-score-group .eyebrow {
+  margin-bottom: var(--sp-1);
 }
 
-.domain-score-coverage strong {
+.domain-score-bars .score-bar-row {
+  padding-block: 8px;
+}
+
+.domain-score-group-attention .eyebrow {
+  color: var(--attention);
+}
+
+.domain-score-group-healthy .eyebrow {
+  color: var(--stable);
+}
+
+.domain-score-empty {
   color: var(--ink-soft);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 13px;
+  line-height: 1.5;
 }

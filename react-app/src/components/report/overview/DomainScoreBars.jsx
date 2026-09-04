@@ -1,31 +1,46 @@
 import ScoreBar from "../../shared/ScoreBar";
 import { DOMAIN_LABELS } from "../../../utils/bands";
+import { groupDomainScores } from "./overviewModel";
 import "./DomainScoreBars.css";
 
+const GROUP_META = [
+  { id: "attention", label: "Needs attention" },
+  { id: "healthy", label: "Healthy" },
+  { id: "unavailable", label: "Not measured" },
+];
+
 export default function DomainScoreBars({ domainScores, unmeasuredDomains = [] }) {
-  const reasonFor = (domainId) =>
-    unmeasuredDomains.find((u) => u.domain === domainId)?.reason;
+  const groups = groupDomainScores(domainScores, unmeasuredDomains);
+  const hasScores = (domainScores ?? []).length > 0;
+
+  if (!hasScores) {
+    return (
+      <p className="domain-score-empty">
+        Quality dimensions were not included in this scan.
+      </p>
+    );
+  }
 
   return (
     <div className="domain-score-bars">
-      {(domainScores ?? []).filter((domain) => domain.applicable).map((d) => (
-        <ScoreBar
-          key={d.domain}
-          label={DOMAIN_LABELS[d.domain] ?? d.domain}
-          score={d.score}
-          applicable={d.applicable}
-          reason={d.applicable ? undefined : reasonFor(d.domain)}
-        />
-      ))}
-      {unmeasuredDomains.length > 0 && (
-        <div className="domain-score-coverage">
-          <strong>{domainScores.length - unmeasuredDomains.length} of {domainScores.length} measured</strong>
-          <span>
-            {unmeasuredDomains.map((domain) => DOMAIN_LABELS[domain.domain] ?? domain.domain).join(", ")}
-            {" "}were not applicable or are not supported by the current pipeline.
-          </span>
-        </div>
-      )}
+      {GROUP_META.map((group) => {
+        const items = groups[group.id];
+        if (!items.length) return null;
+        return (
+          <div key={group.id} className={`domain-score-group domain-score-group-${group.id}`}>
+            <p className="eyebrow">{group.label}</p>
+            {items.map((domain) => (
+              <ScoreBar
+                key={domain.domain}
+                label={DOMAIN_LABELS[domain.domain] ?? domain.domain}
+                score={domain.score}
+                applicable={domain.applicable}
+                reason={domain.reason}
+              />
+            ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

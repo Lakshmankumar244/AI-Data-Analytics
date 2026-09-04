@@ -3,6 +3,33 @@ export function formatNumber(n) {
   return new Intl.NumberFormat("en-IN").format(n);
 }
 
+function parseReportDate(value) {
+  if (!value) return null;
+  const normalized = String(value).replace(
+    /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?::\d{3})?/,
+    "$1T$2"
+  );
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatReportDate(value) {
+  const date = parseReportDate(value);
+  if (!date) return value ? String(value) : null;
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+export function formatReportPeriod(from, to) {
+  const start = formatReportDate(from);
+  const end = formatReportDate(to);
+  if (start && end) return `${start} to ${end}`;
+  return start || end || null;
+}
+
 export function formatDelta(n) {
   if (n === 0) return "\u00b10";
   return n > 0 ? `+${n}` : `${n}`;

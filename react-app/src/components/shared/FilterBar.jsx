@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { useAppState, useActions } from "../../state/AppContext";
-import { formatNumber } from "../../utils/format";
+import { formatNumber, formatReportPeriod } from "../../utils/format";
 import { ContentContainer } from "../layout";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import "./FilterBar.css";
 
 const RANGE_LABELS = { "30d": "Last 30 days", "90d": "Last 90 days", "180d": "Last 6 months", all: "All time" };
@@ -38,10 +49,6 @@ function ChevronIcon() {
   );
 }
 
-// Small local dropdown - trigger button + popover panel. No new
-// dependency, closes on outside click or Escape. Kept in this file
-// since only FilterBar uses it today; promote to shared/ if a second
-// consumer shows up.
 function FilterDropdown({ label, valueLabel, isOpen, onToggle, onClose, disabled, children }) {
   const ref = useRef(null);
 
@@ -80,17 +87,17 @@ function FilterDropdown({ label, valueLabel, isOpen, onToggle, onClose, disabled
   );
 }
 
-export default function FilterBar() {
+function useReportFilters() {
   const { connection, scan, scanConfig, filterModules, tab } = useAppState();
-  const { setFilter, showHome } = useActions();
-  const [openMenu, setOpenMenu] = useState(null); // "modules" | "attribution" | null
+  const { setFilter } = useActions();
+  const [openMenu, setOpenMenu] = useState(null);
 
   const reportClock = scan?.reportContext?.clock;
   const clockLabel = reportClock
     ? reportClock === "Created_Time" ? "Created date" : reportClock === "Modified_Time" ? "Modified date" : reportClock
     : CLOCK_LABELS[scanConfig.clock] ?? scanConfig.clock;
   const rangeLabel = scan?.reportContext
-    ? `${scan.reportContext.fromUtc || "—"} – ${scan.reportContext.toUtc || "—"}`
+    ? formatReportPeriod(scan.reportContext.fromUtc, scan.reportContext.toUtc) ?? "—"
     : RANGE_LABELS[scanConfig.range?.id] ?? "Custom range";
   const depthLabel = String(scan?.reportContext?.depth || scanConfig.depth || "quick")
     .replace(/^./, (letter) => letter.toUpperCase());
@@ -108,11 +115,15 @@ export default function FilterBar() {
   const displayedModules = filterModules.length
     ? scannedModules.filter((module) => filterModules.includes(module.apiName))
     : scannedModules;
+  const modulesValueLabel =
+    filterModules.length === 0 || filterModules.length === scannedModules.length
+      ? `All ${scannedModules.length}`
+      : displayedModules.map((module) => module.label).join(", ");
 
-  // Real value, not a placeholder: mirrors whatever period is actually
-  // selected above, computed from real dates when available.
   const compareDays = periodLengthDays(scan, scanConfig);
   const compareLabel = compareDays ? `Prior ${compareDays} day${compareDays === 1 ? "" : "s"}` : "Prior period";
+  const showUsers = tab !== "users";
+  const filterCount = 4 + (showUsers ? 1 : 0);
 
   function toggleModule(apiName) {
     const set = new Set(filterModules);
@@ -120,29 +131,183 @@ export default function FilterBar() {
     setFilter({ filterModules: Array.from(set) });
   }
 
-  // Real change, following the same setFilter merge pattern already used
-  // by toggleModule and OverviewTab's focusState - not a placeholder.
   function setAttribution(clockId) {
     setFilter({ scanConfig: { ...scanConfig, clock: clockId } });
     setOpenMenu(null);
   }
 
-  // TODO: replace with real print implementation once available
+  return {
+    openMenu,
+    setOpenMenu,
+    clockLabel,
+    rangeLabel,
+    depthLabel,
+    accountLabel,
+    scannedModules,
+    displayedModules,
+    modulesValueLabel,
+    compareLabel,
+    showUsers,
+    filterCount,
+    filterModules,
+    scanConfig,
+    toggleModule,
+    setAttribution,
+  };
+}
+
+function ModuleOptions({ scannedModules, filterModules, toggleModule }) {
+  return (
+    <div className="filter-dropdown-options" aria-label="Filter report modules">
+      {scannedModules.map((module) => {
+        const isActive = filterModules.length === 0 || filterModules.includes(module.apiName);
+        return (
+          <button
+            key={module.apiName}
+            type="button"
+            className="filter-dropdown-option filter-dropdown-option-checkbox"
+            aria-pressed={isActive}
+            onClick={() => toggleModule(module.apiName)}
+          >
+            <span className="filter-dropdown-checkbox" aria-hidden="true" />
+            {module.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function AttributionOptions({ scanConfig, setAttribution }) {
+  return (
+    <div className="filter-dropdown-options">
+      {CLOCK_OPTIONS.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          className="filter-dropdown-option"
+          aria-pressed={scanConfig.clock === option.id}
+          onClick={() => setAttribution(option.id)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function FilterCommand({
+  variant,
+  rangeLabel,
+  modulesValueLabel,
+  clockLabel,
+  compareLabel,
+  showUsers,
+  openMenu,
+  setOpenMenu,
+  scannedModules,
+  filterModules,
+  toggleModule,
+  scanConfig,
+  setAttribution,
+}) {
+  const isSheet = variant === "sheet";
+
+  return (
+    <div className={`filter-command filter-command-${variant}`}>
+      <div className="filter-control">
+        <span className="eyebrow">Period</span>
+        <span className="filter-control-value mono">{rangeLabel}</span>
+      </div>
+
+      {isSheet ? (
+        <div className="filter-control filter-control-stack">
+          <span className="eyebrow">Modules</span>
+          <span className="filter-control-value">{modulesValueLabel}</span>
+          <ModuleOptions
+            scannedModules={scannedModules}
+            filterModules={filterModules}
+            toggleModule={toggleModule}
+          />
+        </div>
+      ) : (
+        <FilterDropdown
+          label="Modules"
+          valueLabel={modulesValueLabel}
+          isOpen={openMenu === "modules"}
+          onToggle={() => setOpenMenu(openMenu === "modules" ? null : "modules")}
+          onClose={() => setOpenMenu(null)}
+        >
+          <ModuleOptions
+            scannedModules={scannedModules}
+            filterModules={filterModules}
+            toggleModule={toggleModule}
+          />
+        </FilterDropdown>
+      )}
+
+      {showUsers && (
+        isSheet ? (
+          <div className="filter-control filter-control-stack">
+            <span className="eyebrow">Users</span>
+            <span className="filter-control-value filter-control-placeholder">
+              {formatNumber(null)}
+            </span>
+            <p className="filter-sheet-note">User filtering is not enabled yet.</p>
+          </div>
+        ) : (
+          <FilterDropdown
+            label="Users"
+            valueLabel={formatNumber(null)}
+            isOpen={false}
+            onToggle={() => {}}
+            onClose={() => {}}
+            disabled
+          />
+        )
+      )}
+
+      {isSheet ? (
+        <div className="filter-control filter-control-stack">
+          <span className="eyebrow">Attribution</span>
+          <span className="filter-control-value">{clockLabel}</span>
+          <AttributionOptions scanConfig={scanConfig} setAttribution={setAttribution} />
+        </div>
+      ) : (
+        <FilterDropdown
+          label="Attribution"
+          valueLabel={clockLabel}
+          isOpen={openMenu === "attribution"}
+          onToggle={() => setOpenMenu(openMenu === "attribution" ? null : "attribution")}
+          onClose={() => setOpenMenu(null)}
+        >
+          <AttributionOptions scanConfig={scanConfig} setAttribution={setAttribution} />
+        </FilterDropdown>
+      )}
+
+      <div className="filter-control filter-control-compare">
+        <span className="eyebrow">Compare</span>
+        <span className="filter-control-value filter-control-strong">{compareLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+export default function FilterBar() {
+  const { showHome } = useActions();
+  const filters = useReportFilters();
+  const [sheetOpen, setSheetOpen] = useState(false);
+
   function handlePrint() {
     window.print();
   }
 
-  // TODO: wire real export (CSV/PDF) once the export endpoint exists
   function handleExport() {
     console.log("Export: not yet implemented");
   }
 
   return (
     <header className="filter-bar">
-      {/* Three wrapping groups rather than one long nowrap row. Each group
-          stays intact and drops to its own line when the bar runs out of
-          width, so the filters stay usable instead of overflowing the page
-          at the mid widths a zoomed-in laptop produces. */}
       <ContentContainer className="filter-bar-inner">
         <div className="filter-bar-lead">
           <button type="button" className="filter-bar-back" onClick={showHome}>
@@ -150,104 +315,57 @@ export default function FilterBar() {
           </button>
 
           <div className="filter-bar-title-block">
-            <h1>{displayedModules.map((module) => module.label).join(" + ") || "Analytics"}</h1>
-            {accountLabel && (
-              <p className="filter-bar-subtitle" title={accountLabel}>
-                {accountLabel} · {depthLabel} scan
+            <h1>{filters.displayedModules.map((module) => module.label).join(" + ") || "Analytics"}</h1>
+            {filters.accountLabel && (
+              <p className="filter-bar-subtitle" title={filters.accountLabel}>
+                {filters.accountLabel} · {filters.depthLabel} scan
               </p>
             )}
           </div>
         </div>
 
-        <div className="filter-bar-controls">
-          <div className="filter-control">
-            <span className="eyebrow">Period</span>
-            <span className="filter-control-value mono">{rangeLabel}</span>
-          </div>
+        <FilterCommand variant="bar" {...filters} />
 
-          <FilterDropdown
-            label="Modules"
-            valueLabel={
-              filterModules.length === 0 || filterModules.length === scannedModules.length
-                ? `All ${scannedModules.length}`
-                : displayedModules.map((m) => m.label).join(", ")
-            }
-            isOpen={openMenu === "modules"}
-            onToggle={() => setOpenMenu(openMenu === "modules" ? null : "modules")}
-            onClose={() => setOpenMenu(null)}
-          >
-            <div className="filter-dropdown-options" aria-label="Filter report modules">
-              {scannedModules.map((module) => {
-                const isActive = filterModules.length === 0 || filterModules.includes(module.apiName);
-                return (
-                  <button
-                    key={module.apiName}
-                    type="button"
-                    className="filter-dropdown-option filter-dropdown-option-checkbox"
-                    aria-pressed={isActive}
-                    onClick={() => toggleModule(module.apiName)}
-                  >
-                    <span className="filter-dropdown-checkbox" aria-hidden="true" />
-                    {module.label}
-                  </button>
-                );
-              })}
-            </div>
-          </FilterDropdown>
-
-          {/* Hidden on the Users tab on purpose - filtering "by user" while
-              already viewing the per-user breakdown is redundant there. */}
-          {tab !== "users" && (
-            <FilterDropdown
-              label="Users"
-              valueLabel={formatNumber(null) /* "—" - no user data loaded here yet, don't imply a fake count */}
-              isOpen={false}
-              onToggle={() => {}}
-              onClose={() => {}}
-              disabled
+        <div className="filter-bar-toolbar">
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="filter-bar-mobile-trigger"
+              onClick={() => setSheetOpen(true)}
             >
-              {/* No user list is loaded into this component today - there is
-                  nothing real to show here yet, so this stays visibly inert
-                  (dimmed, "Not enabled yet" tooltip) rather than faking
-                  selectable options. TODO: wire once user data is available. */}
-            </FilterDropdown>
-          )}
+              <SlidersHorizontal />
+              Filters · {filters.filterCount}
+            </Button>
+            <SheetContent side="right" className="filter-sheet" showCloseButton>
+              <SheetHeader>
+                <SheetTitle>Report filters</SheetTitle>
+                <SheetDescription>
+                  Changes apply immediately to the current report.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="filter-sheet-body">
+                <FilterCommand variant="sheet" {...filters} />
+              </div>
+              <SheetFooter>
+                <SheetClose asChild>
+                  <Button type="button" className="filter-sheet-done">
+                    Done
+                  </Button>
+                </SheetClose>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
 
-          <FilterDropdown
-            label="Attribution"
-            valueLabel={clockLabel}
-            isOpen={openMenu === "attribution"}
-            onToggle={() => setOpenMenu(openMenu === "attribution" ? null : "attribution")}
-            onClose={() => setOpenMenu(null)}
-          >
-            <div className="filter-dropdown-options">
-              {CLOCK_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  className="filter-dropdown-option"
-                  aria-pressed={scanConfig.clock === option.id}
-                  onClick={() => setAttribution(option.id)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </FilterDropdown>
-
-          <div className="filter-control filter-control-compare">
-            <span className="eyebrow">Compare</span>
-            <span className="filter-control-value filter-control-strong">{compareLabel}</span>
+          <div className="filter-bar-actions">
+            <button type="button" className="filter-bar-action" onClick={handlePrint}>
+              Print
+            </button>
+            <button type="button" className="filter-bar-action filter-bar-action-caret" onClick={handleExport}>
+              Export <ChevronIcon />
+            </button>
           </div>
-        </div>
-
-        <div className="filter-bar-actions">
-          <button type="button" className="filter-bar-action" onClick={handlePrint}>
-            Print
-          </button>
-          <button type="button" className="filter-bar-action filter-bar-action-caret" onClick={handleExport}>
-            Export <ChevronIcon />
-          </button>
         </div>
       </ContentContainer>
     </header>

@@ -4,8 +4,10 @@ export default function OverviewKpiCard({
   label,
   value,
   hint,
+  detail,
   tone = "neutral",
   icon: Icon,
+  action,
 }) {
   const unavailable = value === null || value === undefined;
 
@@ -22,7 +24,13 @@ export default function OverviewKpiCard({
         <span>{label}</span>
       </div>
       <strong className="mono">{unavailable ? formatNumber(null) : formatNumber(value)}</strong>
+      {detail && !unavailable && <p className="overview-kpi-detail">{detail}</p>}
       {hint && <p className="overview-kpi-hint">{hint}</p>}
+      {action && (
+        <button type="button" className="overview-kpi-action" onClick={action.onClick}>
+          {action.label}
+        </button>
+      )}
     </article>
   );
 }
