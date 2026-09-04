@@ -8,6 +8,7 @@ export default function OverviewKpiCard({
   tone = "neutral",
   icon: Icon,
   action,
+  unavailableLabel = "Not measured",
 }) {
   const unavailable = value === null || value === undefined;
 
@@ -23,7 +24,9 @@ export default function OverviewKpiCard({
         )}
         <span>{label}</span>
       </div>
-      <strong className="mono">{unavailable ? formatNumber(null) : formatNumber(value)}</strong>
+      <strong className={unavailable ? undefined : "mono"}>
+        {unavailable ? unavailableLabel : formatNumber(value)}
+      </strong>
       {detail && !unavailable && <p className="overview-kpi-detail">{detail}</p>}
       {hint && <p className="overview-kpi-hint">{hint}</p>}
       {action && (

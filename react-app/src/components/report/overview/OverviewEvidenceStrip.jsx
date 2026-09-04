@@ -1,10 +1,13 @@
 import { formatNumber } from "../../../utils/format";
 
-function Fact({ label, value, display, hint }) {
+function Fact({ label, value, display, hint, unavailableLabel = "Not measured" }) {
+  const unavailable = value === null || value === undefined;
+  const shown = display ?? (unavailable ? unavailableLabel : formatNumber(value));
+
   return (
-    <div className="overview-evidence-fact">
+    <div className={`overview-evidence-fact${unavailable && !display ? " overview-evidence-fact-empty" : ""}`}>
       <span>{label}</span>
-      <strong className="mono">{display ?? formatNumber(value)}</strong>
+      <strong className={unavailable && !display ? undefined : "mono"}>{shown}</strong>
       {hint && <em>{hint}</em>}
     </div>
   );
@@ -26,9 +29,8 @@ export default function OverviewEvidenceStrip({
       <Fact
         label="Duplicates"
         value={duplicateCount}
-        hint={
-          duplicateCount === null ? "Not measured in this scan" : undefined
-        }
+        hint={duplicateCount === null ? undefined : "Duplicate occurrences"}
+        unavailableLabel="Not measured"
       />
       <Fact label="Modules scanned" value={moduleCount} />
       <Fact
@@ -36,9 +38,11 @@ export default function OverviewEvidenceStrip({
         display={
           coverageReady
             ? `${formatNumber(measuredPoints)}/${formatNumber(possiblePoints)}`
-            : formatNumber(null)
+            : undefined
         }
-        hint={coverageReady ? "Measured points" : "Not available"}
+        value={coverageReady ? measuredPoints : null}
+        hint={coverageReady ? "Measured points" : undefined}
+        unavailableLabel="Not available"
       />
     </section>
   );

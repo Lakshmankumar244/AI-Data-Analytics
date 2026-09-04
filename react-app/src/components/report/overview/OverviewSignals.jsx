@@ -28,6 +28,7 @@ export default function OverviewSignals({
             ? "Record-level classification is not included in the current aggregate scan."
             : "Records currently classified as proper."
         }
+        unavailableLabel="Not measured"
       />
       <OverviewKpiCard
         label="Need attention"
@@ -40,6 +41,7 @@ export default function OverviewSignals({
             ? "Record-level classification is not included in the current aggregate scan."
             : "Records in an incomplete, inaccurate, suspicious, or duplicate state."
         }
+        unavailableLabel="Not measured"
       />
       <OverviewKpiCard
         label="Suspicious records"
@@ -52,6 +54,7 @@ export default function OverviewSignals({
             ? "Suspicious-record counts are not included in the current aggregate scan."
             : "Records classified as suspicious."
         }
+        unavailableLabel="Not measured"
       />
       <OverviewKpiCard
         label="Users needing help"
@@ -59,6 +62,7 @@ export default function OverviewSignals({
         tone="neutral"
         icon={Users}
         hint="User-level help ranking is not available on this scan."
+        unavailableLabel="Not available"
         action={
           onOpenUsers
             ? { label: "Open Users", onClick: onOpenUsers }

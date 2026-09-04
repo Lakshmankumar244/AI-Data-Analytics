@@ -71,8 +71,10 @@ export function AppHeader({ mobileOpen, setMobileOpen }) {
           </button>
           <div className="app-header-context">
             <p className="eyebrow app-header-kicker">{context.kicker}</p>
-            <p className="app-header-title">{context.title}</p>
-            {meta && <p className="app-header-meta">{meta}</p>}
+            <div className="app-header-heading">
+              <p className="app-header-title">{context.title}</p>
+              {meta && <p className="app-header-meta">{meta}</p>}
+            </div>
           </div>
         </div>
 

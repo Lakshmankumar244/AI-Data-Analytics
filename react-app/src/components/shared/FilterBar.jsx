@@ -99,6 +99,11 @@ function useReportFilters() {
   const rangeLabel = scan?.reportContext
     ? formatReportPeriod(scan.reportContext.fromUtc, scan.reportContext.toUtc) ?? "—"
     : RANGE_LABELS[scanConfig.range?.id] ?? "Custom range";
+  const rangeLabelCompact = scan?.reportContext
+    ? formatReportPeriod(scan.reportContext.fromUtc, scan.reportContext.toUtc, {
+        compact: true,
+      }) ?? rangeLabel
+    : rangeLabel;
   const depthLabel = String(scan?.reportContext?.depth || scanConfig.depth || "quick")
     .replace(/^./, (letter) => letter.toUpperCase());
   const reportConnection = scan?.reportContext?.connection;
@@ -141,6 +146,7 @@ function useReportFilters() {
     setOpenMenu,
     clockLabel,
     rangeLabel,
+    rangeLabelCompact,
     depthLabel,
     accountLabel,
     scannedModules,
@@ -199,6 +205,7 @@ function AttributionOptions({ scanConfig, setAttribution }) {
 function FilterCommand({
   variant,
   rangeLabel,
+  rangeLabelCompact,
   modulesValueLabel,
   clockLabel,
   compareLabel,
@@ -214,10 +221,17 @@ function FilterCommand({
   const isSheet = variant === "sheet";
 
   return (
-    <div className={`filter-command filter-command-${variant}`}>
-      <div className="filter-control">
+    <div
+      className={`filter-command filter-command-${variant}${
+        !isSheet && !showUsers ? " filter-command-no-users" : ""
+      }`}
+    >
+      <div className="filter-control filter-control-period">
         <span className="eyebrow">Period</span>
-        <span className="filter-control-value mono">{rangeLabel}</span>
+        <span className="filter-control-value filter-control-period-value mono" title={rangeLabel}>
+          <span className="filter-period-full">{rangeLabel}</span>
+          <span className="filter-period-compact">{rangeLabelCompact ?? rangeLabel}</span>
+        </span>
       </div>
 
       {isSheet ? (

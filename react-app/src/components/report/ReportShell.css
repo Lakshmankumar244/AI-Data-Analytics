@@ -15,8 +15,8 @@
 
 /*
   Alignment comes from ContentContainer: the same max-width and the same
-  gutter as the filter bar and the tab bar, centred inside the main column
-  rather than inside the viewport, so the rail no longer offsets it.
+  gutter as the filter bar, centred inside the main column rather than
+  inside the viewport, so the rail no longer offsets it.
 */
 .report-shell-body {
   flex: 1 1 auto;

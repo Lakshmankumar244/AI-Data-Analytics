@@ -1,16 +1,20 @@
 .domain-score-bars {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--sp-5);
   min-width: 0;
 }
 
 .domain-score-group .eyebrow {
-  margin-bottom: var(--sp-1);
+  margin-bottom: 2px;
 }
 
 .domain-score-bars .score-bar-row {
-  padding-block: 8px;
+  padding-block: 7px;
+}
+
+.domain-score-bars .score-bar-label {
+  font-size: 12px;
 }
 
 .domain-score-group-attention .eyebrow {
@@ -19,6 +23,10 @@
 
 .domain-score-group-healthy .eyebrow {
   color: var(--stable);
+}
+
+.domain-score-group-unavailable .eyebrow {
+  color: var(--muted);
 }
 
 .domain-score-empty {

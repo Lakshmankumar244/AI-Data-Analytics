@@ -13,20 +13,26 @@ function parseReportDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function formatReportDate(value) {
+export function formatReportDate(value, options = {}) {
   const date = parseReportDate(value);
   if (!date) return value ? String(value) : null;
-  return new Intl.DateTimeFormat("en-IN", {
+  const format = {
     day: "2-digit",
     month: "short",
-    year: "numeric",
-  }).format(date);
+  };
+  if (!options.compact) format.year = "numeric";
+  return new Intl.DateTimeFormat("en-IN", format).format(date);
 }
 
-export function formatReportPeriod(from, to) {
-  const start = formatReportDate(from);
-  const end = formatReportDate(to);
-  if (start && end) return `${start} to ${end}`;
+export function formatReportPeriod(from, to, options = {}) {
+  const startDate = parseReportDate(from);
+  const endDate = parseReportDate(to);
+  const sameYear =
+    startDate && endDate && startDate.getFullYear() === endDate.getFullYear();
+  const compact = Boolean(options.compact && sameYear);
+  const start = formatReportDate(from, { compact });
+  const end = formatReportDate(to, { compact });
+  if (start && end) return `${start} \u2192 ${end}`;
   return start || end || null;
 }
 

@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
-  padding-block: var(--sp-5) var(--sp-7);
+  padding-block: var(--sp-4) var(--sp-7);
   min-width: 0;
 }
 
@@ -56,26 +56,29 @@
 }
 
 .overview-hero-score {
-  margin-top: var(--sp-4);
+  margin-top: var(--sp-3);
   min-width: 0;
 }
 
+.overview-hero .score-gauge {
+  gap: clamp(16px, 3cqi, 32px);
+}
+
+.overview-hero .score-gauge-ring-wrap {
+  width: min(132px, 100%);
+  flex-basis: 132px;
+}
+
+.overview-hero .score-gauge-number {
+  font-size: clamp(34px, 4.4cqi, 44px);
+}
+
 .overview-hero-narrative {
-  margin-top: var(--sp-4);
+  margin-top: var(--sp-3);
   max-width: 52ch;
   color: var(--ink-soft);
   font-size: 14px;
   line-height: 1.5;
-}
-
-.overview-hero-narrative-quiet,
-.overview-hero-compare-empty {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.overview-hero-compare-empty {
-  margin-top: var(--sp-2);
 }
 
 .overview-signals {
@@ -205,6 +208,9 @@
 .overview-kpi-empty .overview-kpi-icon,
 .overview-kpi-empty strong {
   color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .overview-evidence {
@@ -246,6 +252,13 @@
   line-height: 1.4;
 }
 
+.overview-evidence-fact-empty strong {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
 .overview-panel-actions {
   display: flex;
   flex-wrap: wrap;
@@ -263,8 +276,8 @@
 .overview-empty-note {
   display: flex;
   align-items: center;
-  min-height: 88px;
-  padding: var(--sp-4);
+  min-height: 64px;
+  padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
   color: var(--ink-soft);
@@ -359,18 +372,18 @@
 
 .overview-coverage {
   min-width: 0;
-  padding: var(--sp-4) 2px 0;
-  color: var(--ink-soft);
-  font-size: 13px;
+  padding: var(--sp-3) 2px 0;
+  color: var(--muted);
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .overview-coverage .eyebrow {
-  margin-bottom: var(--sp-2);
+  margin-bottom: var(--sp-1);
 }
 
 .overview-coverage strong {
-  color: var(--ink);
+  color: var(--ink-soft);
   font-weight: 650;
 }
 

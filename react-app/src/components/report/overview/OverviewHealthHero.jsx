@@ -27,19 +27,7 @@ export default function OverviewHealthHero({
           unmeasuredDomains={unmeasuredDomains}
         />
       </div>
-      {explanation ? (
-        <p className="overview-hero-narrative">{explanation}</p>
-      ) : (
-        <p className="overview-hero-narrative overview-hero-narrative-quiet">
-          A dominant issue cannot be named until record states or measured
-          dimensions are available.
-        </p>
-      )}
-      {typeof priorScore !== "number" && (
-        <p className="overview-hero-compare-empty">
-          Prior-period comparison is not available for this scan.
-        </p>
-      )}
+      {explanation && <p className="overview-hero-narrative">{explanation}</p>}
     </section>
   );
 }

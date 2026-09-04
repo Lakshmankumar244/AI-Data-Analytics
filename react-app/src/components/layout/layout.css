@@ -9,7 +9,8 @@
      `margin-inline: auto` inside the main column and gutters are sized in
      container query units.
 
-  2. Sticky offsets are never numbers. FilterBar and TabNav stick together
+  2. Sticky offsets are never numbers. The report filter bar sticks as one
+     group inside the scrolling main column.
      as one group inside the scrolling main column, so the tab row follows
      the real height of the filter row at any zoom or wrap state.
 
@@ -305,7 +306,7 @@
   gap: var(--sp-3) var(--sp-5);
   flex-wrap: wrap;
   width: 100%;
-  padding-block: 10px;
+  padding-block: 8px;
 }
 
 .app-header-lead {
@@ -331,8 +332,16 @@
   margin: 0;
 }
 
+.app-header-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 10px;
+  min-width: 0;
+}
+
 .app-header-title {
-  margin: 2px 0 0;
+  margin: 0;
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -343,7 +352,7 @@
 }
 
 .app-header-meta {
-  margin-top: 2px;
+  margin: 0;
   font-size: 12px;
   color: var(--muted);
   overflow: hidden;
