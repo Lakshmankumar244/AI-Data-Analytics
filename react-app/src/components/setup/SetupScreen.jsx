@@ -2,15 +2,41 @@ import { useEffect, useState } from "react";
 import { useAppState, useActions, useAppDispatch } from "../../state/AppContext";
 import * as api from "../../data/client";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
-import { ContentContainer, PageHeader, ResponsiveGrid } from "../layout";
+import { formatReportPeriod } from "../../utils/format";
+import { ContentContainer, PageHeader } from "../layout";
 import AccessibleModulesList from "./AccessibleModulesList";
 import ConnectZohoPanel from "./ConnectZohoPanel";
 import DepthSelector from "./DepthSelector";
 import ClockToggle from "./ClockToggle";
-import DateRangePicker from "./DateRangePicker";
+import { DateRangeField, DateRangePresets, RANGE_LABELS } from "./DateRangePicker";
 import CostEstimate from "./CostEstimate";
 import LoadingState from "../shared/LoadingState";
 import "./SetupScreen.css";
+
+function SetupSection({ step, title, children }) {
+  const headingId = `setup-step-${step}-title`;
+  return (
+    <section className="panel setup-section" aria-labelledby={headingId}>
+      <header className="setup-section-header">
+        <span className="setup-step-index" aria-hidden="true">
+          {step}
+        </span>
+        <h2 id={headingId} className="section-heading">
+          {title}
+        </h2>
+      </header>
+      <div className="setup-section-body">{children}</div>
+    </section>
+  );
+}
+
+function periodSummary(range) {
+  const resolved = formatReportPeriod(range?.from, range?.to);
+  if (resolved) return resolved;
+  if (range?.id && RANGE_LABELS[range.id]) return RANGE_LABELS[range.id];
+  if (range?.id === "custom") return "Custom range";
+  return range?.id || "Period not set";
+}
 
 export default function SetupScreen() {
   const { connection, scanConfig, connectionNotice, scanHistory } = useAppState();
@@ -146,61 +172,115 @@ export default function SetupScreen() {
     }
   }
 
+  const organizationLabel =
+    connection.organizationName || connection.organizationId || "Zoho CRM";
+  const connectedName =
+    connection.connectedUser?.name || connection.connectedUser?.email;
+  const moduleCount = scanConfig.modules.length;
+
   return (
     <ContentContainer className="setup-screen">
-      <PageHeader title="Check your data health">
-        <p className="page-header-description">
-          Connected as <strong>{connection.connectedUser.name}</strong>. This scans
-          only what your account can see in Zoho CRM.
-        </p>
-      </PageHeader>
+      <div className="setup-workspace">
+        <SetupSection step={1} title="Org and depth">
+          <div className="setup-field-row">
+            <div className="setup-field">
+              <p className="eyebrow">Client org</p>
+              <div className="setup-field-control setup-field-control-readonly">
+                {organizationLabel}
+              </div>
+              {connectedName && (
+                <p className="setup-org-meta">
+                  Connected as <strong>{connectedName}</strong>. This scans only
+                  what your account can see in Zoho CRM.
+                </p>
+              )}
+              <button
+                type="button"
+                className="setup-connect-another"
+                onClick={handleConnect}
+                disabled={connecting}
+              >
+                + Connect to another organization
+              </button>
+            </div>
+            <DepthSelector
+              value={scanConfig.depth}
+              onChange={(depth) => setScanConfig({ depth })}
+            />
+          </div>
+        </SetupSection>
 
-      <ResponsiveGrid min="360px" gap="var(--sp-5)" className="setup-grid">
-        <section className="panel">
+        <SetupSection step={2} title="Period">
+          <DateRangePresets
+            value={scanConfig.range}
+            onChange={(range) => setScanConfig({ range })}
+          />
+          <div className="setup-field-row">
+            <DateRangeField
+              value={scanConfig.range}
+              onChange={(range) => setScanConfig({ range })}
+            />
+            <ClockToggle
+              value={scanConfig.clock}
+              onChange={(clock) => setScanConfig({ clock })}
+            />
+          </div>
+        </SetupSection>
+
+        <SetupSection step={3} title="Modules">
           <AccessibleModulesList
             modules={connection.accessibleModules}
             selected={scanConfig.modules}
             onToggle={toggleModule}
             onSelectAll={selectAllModules}
           />
-        </section>
+        </SetupSection>
 
-        <section className="panel">
-          <DepthSelector
-            value={scanConfig.depth}
-            onChange={(depth) => setScanConfig({ depth })}
-          />
+        <section className="panel setup-summary" aria-labelledby="setup-summary-title">
+          <header className="setup-section-header">
+            <h2 id="setup-summary-title" className="section-heading">
+              Scan summary
+            </h2>
+          </header>
+          <div className="setup-summary-bar">
+            <p className="setup-summary-facts">
+              <span>
+                {moduleCount} {moduleCount === 1 ? "module" : "modules"}
+              </span>
+              <span className="setup-summary-sep" aria-hidden="true">
+                |
+              </span>
+              <span>{periodSummary(scanConfig.range)}</span>
+              <span className="setup-summary-sep" aria-hidden="true">
+                |
+              </span>
+              <CostEstimate estimate={estimate} loading={estimating} />
+            </p>
+            <div className="setup-actions">
+              {scanHistory.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={starting}
+                  onClick={() => dispatch({ type: "showHome" })}
+                >
+                  Back to reports
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!scanConfig.modules.length || starting}
+                onClick={handleStart}
+              >
+                {starting ? "Starting\u2026" : "Start scan"}
+              </button>
+            </div>
+          </div>
+          <p className="cost-estimate-scope">
+            Read-only access. Nothing in your CRM is changed by running this scan.
+          </p>
         </section>
-
-        <section className="panel setup-panel-row">
-          <ClockToggle value={scanConfig.clock} onChange={(clock) => setScanConfig({ clock })} />
-          <DateRangePicker value={scanConfig.range} onChange={(range) => setScanConfig({ range })} />
-        </section>
-
-        <section className="panel">
-          <CostEstimate estimate={estimate} loading={estimating} />
-        </section>
-      </ResponsiveGrid>
-
-      <div className="setup-actions">
-        {scanHistory.length > 0 && (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            disabled={starting}
-            onClick={() => dispatch({ type: "showHome" })}
-          >
-            Back to reports
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={!scanConfig.modules.length || starting}
-          onClick={handleStart}
-        >
-          {starting ? "Starting\u2026" : "Run scan"}
-        </button>
       </div>
     </ContentContainer>
   );

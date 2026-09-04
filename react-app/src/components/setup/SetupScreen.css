@@ -1,29 +1,139 @@
-/* Horizontal insetting and the max-width come from the shared content
-   container; the title block comes from PageHeader. */
+/* Horizontal insetting and max-width come from the shared content container.
+   This workspace uses the full content column — a configuration form, not a
+   narrow stacked card. Two-column field rows follow the same auto-fit pattern
+   as ResponsiveGrid so they stack when a column would otherwise be unusable. */
 .setup-screen {
   padding-block: var(--sp-6) var(--sp-8);
 }
 
-/* Columns come from ResponsiveGrid; the panel row still spans the full width
-   however many columns there turn out to be. */
-
-.setup-panel-row {
-  grid-column: 1 / -1;
+.setup-workspace {
   display: flex;
-  gap: var(--sp-7);
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.setup-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+  min-width: 0;
+}
+
+.setup-step-index {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.setup-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.setup-field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: var(--sp-5);
+  min-width: 0;
+}
+
+.setup-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.setup-field-control {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 550;
+  min-width: 0;
+}
+
+.setup-field-control-readonly {
+  display: flex;
+  align-items: center;
+  color: var(--ink-soft);
+}
+
+.setup-org-meta {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.setup-connect-another {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.setup-connect-another:hover:not(:disabled) {
+  color: var(--brand-strong);
+  text-decoration: underline;
+}
+
+.setup-connect-another:disabled {
+  color: var(--disabled);
+  cursor: not-allowed;
+}
+
+.setup-date-inputs {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.setup-date-inputs .setup-field-control {
+  flex: 1 1 140px;
+}
+
+.setup-date-inputs-sep {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .setup-hint {
   color: var(--muted);
   font-size: 13px;
-  margin: var(--sp-1) 0 var(--sp-3);
-  max-width: 52ch;
+  margin: 0;
+  max-width: 72ch;
 }
 
 .accessible-modules {
   display: flex;
   flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.setup-module-panel {
+  z-index: 30;
 }
 
 .module-select-all {
@@ -31,7 +141,7 @@
   align-items: center;
   gap: var(--sp-2);
   min-height: 40px;
-  border-top: 1px solid var(--line);
+  padding: 0 2px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -46,7 +156,7 @@
   margin: 0;
   padding: 0;
   border-top: 1px solid var(--line);
-  height: 288px;
+  max-height: 280px;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
@@ -55,7 +165,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--sp-3) 0;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 2px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -74,6 +185,7 @@
   align-items: center;
   gap: var(--sp-2);
   cursor: pointer;
+  min-width: 0;
 }
 
 .module-row-label {
@@ -84,49 +196,70 @@
   color: var(--muted);
   font-size: 13px;
   padding-right: var(--sp-2);
+  flex: 0 0 auto;
 }
 
-.depth-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--sp-3);
-}
-
-.depth-card {
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  padding: var(--sp-3);
+.setup-module-chips {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
 }
 
-.depth-card:hover {
-  border-color: var(--ink-soft);
-}
-
-.depth-card-active {
-  border-color: var(--brand);
-  background: var(--brand-soft);
-}
-
-.depth-card-label {
+.setup-module-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 8px 4px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px;
   font-weight: 600;
-  font-size: 14px;
+  color: var(--ink-soft);
 }
 
-.depth-card-cap {
-  font-size: 12px;
-  color: var(--brand-strong);
-}
-
-.depth-card-note {
-  font-size: 12px;
+.setup-module-chip-remove {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
   color: var(--muted);
-  line-height: 1.4;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.setup-module-chip-remove:hover {
+  background: var(--surface-sunken);
+  color: var(--ink);
+}
+
+.setup-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.setup-summary-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  min-width: 0;
+  flex: 1 1 240px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.setup-summary-sep {
+  color: var(--muted);
 }
 
 .cost-estimate-loading {
@@ -134,29 +267,8 @@
   font-size: 13px;
 }
 
-.cost-estimate-grid {
-  display: flex;
-  gap: var(--sp-7);
-  margin: var(--sp-2) 0 var(--sp-3);
-}
-
-.cost-estimate-grid > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.cost-estimate-value {
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.cost-estimate-label {
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .cost-estimate-scope {
+  margin-top: var(--sp-4);
   font-size: 12px;
   color: var(--brand-strong);
   background: var(--brand-soft);
@@ -166,9 +278,10 @@
 }
 
 .setup-actions {
-  margin-top: var(--sp-6);
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--sp-2);
+  flex: 0 0 auto;
+  margin-left: auto;
 }

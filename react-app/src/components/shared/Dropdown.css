@@ -102,3 +102,48 @@
   color: var(--brand-strong);
   font-weight: 650;
 }
+
+.dropdown-field-block {
+  width: 100%;
+  min-width: 0;
+}
+
+.dropdown-trigger-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.dropdown-trigger-field .dropdown-trigger-label {
+  max-width: none;
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.dropdown-trigger-field:not(.dropdown-trigger-disabled):hover {
+  border-color: var(--ink-soft);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.dropdown-trigger-field[aria-expanded="true"] {
+  border-color: var(--brand);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.dropdown-panel-field {
+  max-width: none;
+  width: 100%;
+}

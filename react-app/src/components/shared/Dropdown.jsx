@@ -20,12 +20,21 @@ function ChevronIcon() {
  *   options    - [{ id, label }]
  *   onChange   - (id) => void
  *   disabled   - boolean
+ *   variant    - "chip" (default, compact filter) or "field" (full-width form)
  */
-export default function Dropdown({ label, value, options, onChange, disabled }) {
+export default function Dropdown({
+  label,
+  value,
+  options,
+  onChange,
+  disabled,
+  variant = "chip",
+}) {
   const [open, setOpen] = useState(false);
   const [alignRight, setAlignRight] = useState(false);
   const ref = useRef(null);
   const selected = options.find((option) => option.id === value);
+  const isField = variant === "field";
 
   useEffect(() => {
     if (!open) return;
@@ -35,7 +44,7 @@ export default function Dropdown({ label, value, options, onChange, disabled }) 
     // the page edge - so anchor from the right instead in that case.
     if (ref.current) {
       const rect = ref.current.getBoundingClientRect();
-      const estimatedPanelWidth = 320; // matches .dropdown-panel max-width
+      const estimatedPanelWidth = isField ? rect.width : 320;
       const wouldOverflowRight = rect.left + estimatedPanelWidth > window.innerWidth;
       setAlignRight(wouldOverflowRight);
     }
@@ -51,7 +60,7 @@ export default function Dropdown({ label, value, options, onChange, disabled }) 
       document.removeEventListener("mousedown", handleOutside);
       document.removeEventListener("keydown", handleKey);
     };
-  }, [open]);
+  }, [open, isField]);
 
   function choose(id) {
     setOpen(false);
@@ -59,20 +68,22 @@ export default function Dropdown({ label, value, options, onChange, disabled }) 
   }
 
   return (
-    <div className="dropdown-field" ref={ref}>
-      {label && <span className="dropdown-label">{label}</span>}
+    <div className={`dropdown-field${isField ? " dropdown-field-block" : ""}`} ref={ref}>
+      {label && (
+        <span className={isField ? "eyebrow" : "dropdown-label"}>{label}</span>
+      )}
       <button
         type="button"
-        className={`chip dropdown-trigger${disabled ? " dropdown-trigger-disabled" : ""}`}
+        className={`${isField ? "dropdown-trigger dropdown-trigger-field" : "chip dropdown-trigger"}${disabled ? " dropdown-trigger-disabled" : ""}`}
         aria-expanded={open}
         aria-disabled={disabled}
         onClick={() => !disabled && setOpen((current) => !current)}
       >
-        <span className="dropdown-trigger-label">{selected?.label ?? "—"}</span>
+        <span className="dropdown-trigger-label">{selected?.label ?? "\u2014"}</span>
         <ChevronIcon />
       </button>
       {open && !disabled && (
-        <div className={`dropdown-panel${alignRight ? " dropdown-panel-right" : ""}`}>
+        <div className={`dropdown-panel${isField ? " dropdown-panel-field" : ""}${alignRight ? " dropdown-panel-right" : ""}`}>
           {options.map((option) => (
             <button
               key={option.id}
