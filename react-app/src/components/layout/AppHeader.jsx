@@ -56,14 +56,14 @@ export function AppHeader({ mobileOpen, setMobileOpen }) {
   const meta = scanMeta(phase, scan, scanConfig);
 
   return (
-    <header className="flex min-h-[var(--app-header-height)] min-w-0 shrink-0 items-center border-b border-line bg-surface print:!hidden [@media(max-height:640px)]:min-h-10">
-      <ContentContainer className="flex w-full flex-nowrap items-center justify-between gap-x-[var(--sp-5)] gap-y-[var(--sp-3)] py-1">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+    <header className="flex min-h-[var(--app-header-height)] min-w-0 shrink-0 items-center bg-paper print:!hidden [@media(max-height:640px)]:min-h-11">
+      <ContentContainer className="flex w-full flex-nowrap items-center justify-between gap-x-6 gap-y-3 py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-3.5">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="hidden size-9 max-[760px]:inline-flex"
+            className="hidden size-9 rounded-[var(--radius-md)] text-ink-soft hover:bg-surface-sunken hover:text-ink max-[760px]:inline-flex"
             onClick={() => setMobileOpen(true)}
             aria-expanded={Boolean(mobileOpen)}
             aria-controls="app-sidebar"
@@ -73,12 +73,12 @@ export function AppHeader({ mobileOpen, setMobileOpen }) {
           </Button>
           <div className="min-w-0">
             <p className="eyebrow">{context.kicker}</p>
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
-              <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-tight tracking-[-0.02em] max-[560px]:max-w-[46vw]">
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-3">
+              <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap font-heading text-base font-semibold leading-tight tracking-[-0.02em] text-ink max-[560px]:max-w-[46vw]">
                 {context.title}
               </p>
               {meta && (
-                <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-ink-muted max-[560px]:hidden">
+                <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] text-ink-muted max-[560px]:hidden">
                   {meta}
                 </p>
               )}
@@ -86,19 +86,19 @@ export function AppHeader({ mobileOpen, setMobileOpen }) {
           </div>
         </div>
 
-        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end">
           {account && (
             <div
-              className="flex max-w-[min(280px,40cqi)] min-w-0 flex-col items-end rounded-[var(--radius-sm)] border border-line bg-paper px-2.5 py-1 max-[760px]:hidden"
+              className="flex max-w-[min(280px,40cqi)] min-w-0 flex-col items-end gap-0.5 max-[760px]:hidden"
               title={[account.organization, account.user].filter(Boolean).join(" · ")}
             >
               {account.organization && (
-                <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold text-ink">
+                <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium text-ink">
                   {account.organization}
                 </span>
               )}
               {account.user && (
-                <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-ink-muted">
+                <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[12px] text-ink-muted">
                   {account.user}
                 </span>
               )}

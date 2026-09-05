@@ -51,7 +51,7 @@ export function AppShell({ className, children, ...props }) {
   return (
     <div
       className={cn(
-        "app-shell group/shell flex h-[100vh] supports-[height:100dvh]:h-[100dvh] min-w-0 items-stretch bg-paper print:h-auto print:overflow-visible",
+        "app-shell group/shell flex h-[100vh] min-w-0 items-stretch bg-paper supports-[height:100dvh]:h-[100dvh] print:h-auto print:overflow-visible",
         collapsed && "app-shell-collapsed",
         collapsed && "[--app-rail-width:var(--app-rail-collapsed)]",
         mobileOpen && "app-shell-nav-open",
@@ -71,7 +71,7 @@ export function AppShell({ className, children, ...props }) {
         setMobileOpen={setMobileOpen}
       />
       <div
-        className="flex min-h-0 min-w-0 flex-1 flex-col print:h-auto print:overflow-visible"
+        className="flex min-h-0 min-w-0 flex-1 flex-col bg-paper print:h-auto print:overflow-visible"
         inert={mobileOpen || undefined}
       >
         <AppHeader mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />

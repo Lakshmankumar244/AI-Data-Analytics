@@ -19,7 +19,7 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "mb-[var(--sp-6)] flex flex-wrap items-end justify-between gap-x-[var(--sp-5)] gap-y-[var(--sp-4)]",
+        "mb-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-4",
         className
       )}
       {...props}
@@ -27,16 +27,20 @@ export function PageHeader({
       <div className="min-w-0 flex-[1_1_min(100%,420px)]">
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         {title && (
-          <h1 className="mt-[var(--sp-1)] text-[clamp(22px,2.4cqi,28px)]">{title}</h1>
+          <h1 className="mt-1.5 text-[clamp(24px,2.6cqi,32px)] leading-tight tracking-[-0.03em]">
+            {title}
+          </h1>
         )}
         {description && (
-          <p className="mt-[var(--sp-2)] max-w-[72ch] text-ink-soft">{description}</p>
+          <p className="mt-2 max-w-[62ch] text-sm leading-relaxed text-ink-soft">
+            {description}
+          </p>
         )}
-        {meta && <p className="mt-[var(--sp-2)] text-xs text-ink-muted">{meta}</p>}
+        {meta && <p className="mt-2 text-[13px] text-ink-muted">{meta}</p>}
         {children}
       </div>
       {actions && (
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-[var(--sp-2)]">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {actions}
         </div>
       )}

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export default function MoversList({ movers }) {
   if (!movers || movers.length === 0) {
     return (
-      <p className="flex h-full min-h-[120px] items-center bg-surface-sunken px-4 py-3 text-[13px] leading-normal text-ink-soft">
+      <p className="py-2 text-[13px] leading-relaxed text-ink-soft">
         No notable changes since your last check.
       </p>
     );
@@ -24,7 +24,7 @@ export default function MoversList({ movers }) {
         return (
           <li
             key={`${m.type}-${m.key || m.label}`}
-            className="grid min-w-0 grid-cols-[28px_minmax(0,1fr)_auto_auto] items-center gap-3 border-t border-line py-3 first:border-t-0 @max-[420px]:grid-cols-[28px_minmax(0,1fr)_auto]"
+            className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-x-3 py-2"
           >
             <span
               className={cn(
@@ -37,18 +37,20 @@ export default function MoversList({ movers }) {
             >
               <Arrow className="size-3.5" strokeWidth={2} />
             </span>
-            <span className="min-w-0 truncate text-[13px] font-semibold text-ink">
-              {m.label}
-            </span>
-            <span className="bg-surface-sunken px-2 py-0.5 text-[10px] font-bold tracking-wider text-ink-muted uppercase @max-[420px]:col-start-2 @max-[420px]:row-start-2 @max-[420px]:justify-self-start">
-              {m.type}
+            <span className="min-w-0">
+              <span className="block truncate text-[13px] font-semibold tracking-tight text-ink">
+                {m.label}
+              </span>
+              <span className="mt-0.5 block text-[11px] font-semibold tracking-wider text-ink-muted uppercase">
+                {m.type}
+              </span>
             </span>
             <span
               className={cn(
-                "mono min-w-[34px] text-right text-[13px] font-semibold",
+                "mono text-[16px] font-semibold tracking-tight",
                 direction === "up" && "text-strong",
                 direction === "down" && "text-risk",
-                "@max-[420px]:col-start-3 @max-[420px]:row-span-2"
+                direction === "flat" && "text-ink-muted"
               )}
             >
               {formatDelta(m.delta)}

@@ -119,11 +119,11 @@
   --sp-8: 64px;
 
   /* app chrome — shell layout; screens also read these for alignment */
-  --app-rail-width: 232px;
-  --app-rail-collapsed: 64px;
-  --app-header-height: 44px;
+  --app-rail-width: 248px;
+  --app-rail-collapsed: 72px;
+  --app-header-height: 52px;
   --app-content-max: 1480px;
-  --app-gutter: clamp(16px, 3cqi, 40px);
+  --app-gutter: clamp(20px, 3.2cqi, 44px);
   --app-header-scroll-margin: 160px;
 }
 

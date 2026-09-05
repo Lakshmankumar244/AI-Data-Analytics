@@ -9,8 +9,8 @@ export default function OverviewCoverageNotice({
   const measuredCount = domainScores.filter((domain) => domain.applicable).length;
 
   return (
-    <section className="min-w-0 pt-3 text-xs leading-normal text-ink-muted" aria-label="Measurement coverage">
-      <p className="eyebrow mb-1">Measurement coverage</p>
+    <section className="min-w-0 text-[13px] leading-relaxed text-ink-muted" aria-label="Measurement coverage">
+      <p className="eyebrow mb-1.5">Measurement coverage</p>
       <p>
         <strong className="font-semibold text-ink-soft">
           {measuredCount} of {domainScores.length} quality dimensions measured.

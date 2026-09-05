@@ -27,6 +27,7 @@ export function findingsFromModules(moduleFindings = [], filterModules = []) {
         .filter((text) => text && text !== GENERIC_FINDING)
         .map((text) => ({
           module: module.label,
+          apiName: module.apiName,
           text,
           kind: text.includes("invalid") ? "Validity" : "Completeness",
         }))
@@ -104,4 +105,57 @@ export function groupDomainScores(domainScores = [], unmeasuredDomains = []) {
   groups.attention.sort((left, right) => left.score - right.score);
   groups.healthy.sort((left, right) => left.score - right.score);
   return groups;
+}
+
+export function extremeDomains(domainScores = []) {
+  const measured = domainScores.filter(
+    (domain) => domain.applicable && Number.isFinite(Number(domain.score))
+  );
+  if (!measured.length) return { weakest: null, strongest: null };
+  return {
+    weakest: measured.reduce((current, next) =>
+      next.score < current.score ? next : current
+    ),
+    strongest: measured.reduce((current, next) =>
+      next.score > current.score ? next : current
+    ),
+  };
+}
+
+export function dominantStateDetail(stateBreakdown, recordsInScope) {
+  if (!stateBreakdown || !recordsInScope) return null;
+  const classified = RECORD_STATES.filter((state) => state.id !== "proper")
+    .map((state) => ({
+      ...state,
+      count: stateBreakdown[state.id] ?? 0,
+    }))
+    .sort((left, right) => right.count - left.count);
+  const top = classified[0];
+  if (!top?.count) return null;
+  return {
+    id: top.id,
+    label: top.label,
+    color: top.color,
+    soft: top.soft,
+    count: top.count,
+    pct: Math.round((top.count / recordsInScope) * 100),
+  };
+}
+
+export function modulesNeedingAttention(
+  moduleFindings = [],
+  filterModules = [],
+  limit = 6
+) {
+  return moduleFindings
+    .filter(
+      (module) =>
+        !filterModules.length || filterModules.includes(module.apiName)
+    )
+    .filter((module) => Number.isFinite(Number(module.overall)))
+    .sort(
+      (left, right) =>
+        left.overall - right.overall || right.recordCount - left.recordCount
+    )
+    .slice(0, limit);
 }

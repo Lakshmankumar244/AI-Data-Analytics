@@ -7,21 +7,20 @@ function Fact({ label, value, display, hint, unavailableLabel = "Not measured" }
   const empty = unavailable && !display;
 
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-[11px] font-semibold tracking-wide text-ink-muted uppercase">
-        {label}
-      </span>
+    <div className="min-w-0">
+      <span className="eyebrow">{label}</span>
       <strong
         className={cn(
+          "mt-1.5 block tracking-tight",
           empty
-            ? "text-[13px] font-semibold tracking-normal text-ink-muted"
-            : "mono text-[clamp(16px,1.7cqi,20px)] tracking-tight text-ink"
+            ? "text-[13px] font-semibold text-ink-muted"
+            : "mono text-[17px] font-semibold text-ink"
         )}
       >
         {shown}
       </strong>
       {hint && (
-        <em className="text-[11px] leading-snug font-normal not-italic text-ink-muted">
+        <em className="mt-0.5 block text-[11px] leading-snug font-normal not-italic text-ink-muted">
           {hint}
         </em>
       )}
@@ -31,7 +30,6 @@ function Fact({ label, value, display, hint, unavailableLabel = "Not measured" }
 
 export default function OverviewEvidenceStrip({
   recordsInScope,
-  duplicateCount,
   moduleCount,
   measuredPoints,
   possiblePoints,
@@ -41,16 +39,10 @@ export default function OverviewEvidenceStrip({
 
   return (
     <section
-      className="grid min-w-0 grid-cols-4 gap-x-6 gap-y-4 border-y border-line py-5 @max-[760px]:grid-cols-2 @max-[560px]:grid-cols-1"
-      aria-label="Supporting measurements"
+      className="grid min-w-0 grid-cols-3 gap-x-8 gap-y-4"
+      aria-label="Scan coverage"
     >
       <Fact label="Records checked" value={recordsInScope} />
-      <Fact
-        label="Duplicates"
-        value={duplicateCount}
-        hint={duplicateCount === null ? undefined : "Duplicate occurrences"}
-        unavailableLabel="Not measured"
-      />
       <Fact label="Modules scanned" value={moduleCount} />
       <Fact
         label="Coverage"
