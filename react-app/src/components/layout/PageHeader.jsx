@@ -17,15 +17,29 @@ export function PageHeader({
   ...props
 }) {
   return (
-    <header className={cn("page-header", className)} {...props}>
-      <div className="page-header-text">
+    <header
+      className={cn(
+        "mb-[var(--sp-6)] flex flex-wrap items-end justify-between gap-x-[var(--sp-5)] gap-y-[var(--sp-4)]",
+        className
+      )}
+      {...props}
+    >
+      <div className="min-w-0 flex-[1_1_min(100%,420px)]">
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
-        {title && <h1>{title}</h1>}
-        {description && <p className="page-header-description">{description}</p>}
-        {meta && <p className="page-header-meta">{meta}</p>}
+        {title && (
+          <h1 className="mt-[var(--sp-1)] text-[clamp(22px,2.4cqi,28px)]">{title}</h1>
+        )}
+        {description && (
+          <p className="mt-[var(--sp-2)] max-w-[72ch] text-ink-soft">{description}</p>
+        )}
+        {meta && <p className="mt-[var(--sp-2)] text-xs text-ink-muted">{meta}</p>}
         {children}
       </div>
-      {actions && <div className="page-header-actions">{actions}</div>}
+      {actions && (
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-[var(--sp-2)]">
+          {actions}
+        </div>
+      )}
     </header>
   );
 }

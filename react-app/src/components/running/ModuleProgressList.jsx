@@ -1,4 +1,5 @@
 import { formatNumber } from "../../utils/format";
+import { cn } from "@/lib/utils";
 
 const PHASE_LABEL = {
   planning: "Planning",
@@ -15,7 +16,7 @@ export default function ModuleProgressList({
   activeModule,
 }) {
   return (
-    <ul className="progress-list">
+    <ul className="m-0 flex list-none flex-col gap-6 p-0">
       {modules.map((mod) => {
         const p = progress[mod.apiName];
         const isDone = completed.includes(mod.apiName);
@@ -25,10 +26,17 @@ export default function ModuleProgressList({
         const exactTotal = p?.estimatedTotal || 0;
 
         return (
-          <li key={mod.apiName} className="progress-row">
-            <div className="progress-row-top">
-              <span className="progress-row-name">{mod.label}</span>
-              <span className="progress-row-phase eyebrow">
+          <li key={mod.apiName} className="min-w-0">
+            <div className="mb-2 flex items-baseline justify-between gap-4">
+              <span className="text-sm font-semibold text-ink">{mod.label}</span>
+              <span
+                className={cn(
+                  "eyebrow",
+                  isDone && "text-strong",
+                  isActive && "text-brand-strong",
+                  isQueued && "text-ink-muted"
+                )}
+              >
                 {isDone
                   ? "Done"
                   : isQueued
@@ -36,13 +44,17 @@ export default function ModuleProgressList({
                   : PHASE_LABEL[p?.phase] ?? "In progress"}
               </span>
             </div>
-            <div className="progress-track">
+            <div className="h-1.5 overflow-hidden bg-surface-sunken">
               <div
-                className={`progress-fill${isDone ? " progress-fill-done" : ""}${isActive ? " progress-fill-active" : ""}`}
+                className={cn(
+                  "h-full origin-left transition-[width] duration-300 ease-out",
+                  isDone ? "bg-strong" : "bg-brand",
+                  isActive && "motion-safe:animate-pulse"
+                )}
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <div className="progress-row-count mono">
+            <div className="mono mt-1.5 text-xs text-ink-muted">
               {isQueued
                 ? "Waiting to start"
                 : isDone && !exactTotal

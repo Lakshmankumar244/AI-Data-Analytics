@@ -3,7 +3,6 @@ import { DOMAIN_LABELS } from "../../../utils/bands";
 import LoadingState from "../../shared/LoadingState";
 import FieldQualityTable from "./FieldQualityTable";
 import ModuleMatrix from "./ModuleMatrix";
-import "./ModulesTab.css";
 
 const DOMAIN_ORDER = [
   "completeness",
@@ -33,11 +32,11 @@ export default function ModulesTab() {
   );
 
   return (
-    <div className="modules-tab">
-      <section className="panel modules-panel">
-        <div className="panel-header">
+    <div className="flex min-w-0 flex-col gap-10 py-6 pb-12 @max-[720px]:py-4 @max-[720px]:pb-8">
+      <section className="min-w-0">
+        <header className="mb-2.5">
           <p className="eyebrow">Modules</p>
-        </div>
+        </header>
         <ModuleMatrix
           modules={visibleModules}
           domainOrder={measuredDomainOrder}
@@ -47,31 +46,39 @@ export default function ModulesTab() {
       </section>
 
       {visibleModules.map((module) => (
-        <section className="panel module-detail" key={module.apiName}>
-          <div className="panel-header module-detail-header">
+        <section className="min-w-0 border-t border-line pt-8" key={module.apiName}>
+          <header className="mb-2.5 flex flex-wrap items-start justify-between gap-2.5">
             <div>
               <p className="eyebrow">{module.label}</p>
-              <h2>Field quality</h2>
-              <p className="module-detail-count">
+              <h2 className="mt-0.5 font-heading text-base font-semibold tracking-tight text-ink">
+                Field quality
+              </h2>
+              <p className="mt-0.5 text-xs text-ink-muted">
                 {module.recordCount.toLocaleString("en-IN")} records analyzed
               </p>
             </div>
-            <div className="module-domain-summary" aria-label="Measured scores">
+            <div
+              className="flex flex-wrap gap-x-4 gap-y-1"
+              aria-label="Measured scores"
+            >
               {DOMAIN_ORDER.filter(
                 (domain) => typeof module.domains[domain] === "number"
               ).map((domain) => (
-                <span key={domain}>
-                  {DOMAIN_LABELS[domain]} <strong>{module.domains[domain]}</strong>
+                <span key={domain} className="text-[11px] text-ink-soft">
+                  {DOMAIN_LABELS[domain]}{" "}
+                  <strong className="mono ml-1 font-semibold text-ink">
+                    {module.domains[domain]}
+                  </strong>
                 </span>
               ))}
             </div>
-          </div>
+          </header>
 
           <FieldQualityTable fields={module.fields} />
 
-          <div className="module-recommendations">
-            <p className="eyebrow">Recommended attention</p>
-            <ul>
+          <div className="mt-4">
+            <p className="eyebrow text-attention">Recommended attention</p>
+            <ul className="mt-2 mb-0 list-disc space-y-1.5 pl-[18px] text-xs text-ink-soft">
               {module.recommendations.map((recommendation) => (
                 <li key={recommendation}>{recommendation}</li>
               ))}

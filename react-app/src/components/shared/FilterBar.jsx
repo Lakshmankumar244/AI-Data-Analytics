@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { Check, SlidersHorizontal } from "lucide-react";
 import { useAppState, useActions } from "../../state/AppContext";
 import { formatNumber, formatReportPeriod } from "../../utils/format";
 import { exportVisibleTables } from "../../utils/exportTable";
 import { groupOwnerAnalytics } from "../../data/ownerAnalytics";
+import { cn } from "@/lib/utils";
 import { ContentContainer } from "../layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +16,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import "./FilterBar.css";
 
 const RANGE_LABELS = { "30d": "Last 30 days", "90d": "Last 90 days", "180d": "Last 6 months", all: "All time" };
 const CLOCK_LABELS = { created: "Created date", modified: "Modified date" };
@@ -39,9 +39,19 @@ function periodLengthDays(scan, scanConfig) {
   return null;
 }
 
-function ChevronIcon() {
+function ChevronIcon({ open = false }) {
   return (
-    <svg width="9" height="6" viewBox="0 0 9 6" fill="none" aria-hidden="true" className="filter-dropdown-caret">
+    <svg
+      width="9"
+      height="6"
+      viewBox="0 0 9 6"
+      fill="none"
+      aria-hidden="true"
+      className={cn(
+        "shrink-0 text-ink-muted transition-transform duration-150",
+        open && "rotate-180 text-brand-strong"
+      )}
+    >
       <path d="M1 1L4.5 4.5L8 1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -67,20 +77,38 @@ function FilterDropdown({ label, valueLabel, isOpen, onToggle, onClose, disabled
   }, [isOpen, onClose]);
 
   return (
-    <div className="filter-control filter-dropdown" ref={ref}>
+    <div className="relative flex min-w-0 flex-col justify-center gap-px px-2.5 py-0.5" ref={ref}>
       <span className="eyebrow">{label}</span>
       <button
         type="button"
-        className={`filter-dropdown-trigger${disabled ? " filter-dropdown-trigger-disabled" : ""}`}
+        className={cn(
+          "inline-flex max-w-full items-center gap-1 border-0 bg-transparent p-0",
+          disabled ? "cursor-not-allowed" : "cursor-pointer"
+        )}
         aria-expanded={isOpen}
         aria-disabled={disabled}
         title={disabled ? "User analytics were not measured in this scan" : undefined}
         onClick={() => !disabled && onToggle()}
       >
-        <span className="filter-control-value">{valueLabel}</span>
-        <ChevronIcon />
+        <span
+          className={cn(
+            "truncate text-xs font-medium",
+            disabled
+              ? "text-ink-muted opacity-70"
+              : isOpen
+                ? "text-brand-strong"
+                : "text-ink hover:text-brand-strong"
+          )}
+        >
+          {valueLabel}
+        </span>
+        <ChevronIcon open={isOpen && !disabled} />
       </button>
-      {isOpen && !disabled && <div className="filter-dropdown-panel">{children}</div>}
+      {isOpen && !disabled && (
+        <div className="absolute top-[calc(100%+10px)] left-0 z-30 min-w-[min(200px,100%)] max-w-[min(300px,70cqi)] bg-surface p-2 shadow-floating ring-1 ring-line">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -173,22 +201,48 @@ function useReportFilters() {
   };
 }
 
+function FilterOption({ pressed, onClick, children }) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "flex w-full items-center gap-2.5 border-0 px-2.5 py-2 text-left text-[13px] font-medium",
+        pressed
+          ? "bg-brand-soft font-semibold text-brand-strong"
+          : "bg-transparent text-ink-soft hover:bg-surface-sunken"
+      )}
+      aria-pressed={pressed}
+      onClick={onClick}
+    >
+      <span
+        className={cn(
+          "grid size-[15px] shrink-0 place-items-center border-[1.5px]",
+          pressed
+            ? "border-brand bg-brand text-on-brand"
+            : "border-line-strong bg-surface"
+        )}
+        aria-hidden="true"
+      >
+        {pressed && <Check className="size-2.5" strokeWidth={3} />}
+      </span>
+      {children}
+    </button>
+  );
+}
+
 function ModuleOptions({ scannedModules, filterModules, toggleModule }) {
   return (
-    <div className="filter-dropdown-options" aria-label="Filter report modules">
+    <div className="flex max-h-60 flex-col gap-0.5 overflow-y-auto" aria-label="Filter report modules">
       {scannedModules.map((module) => {
         const isActive = filterModules.length === 0 || filterModules.includes(module.apiName);
         return (
-          <button
+          <FilterOption
             key={module.apiName}
-            type="button"
-            className="filter-dropdown-option filter-dropdown-option-checkbox"
-            aria-pressed={isActive}
+            pressed={isActive}
             onClick={() => toggleModule(module.apiName)}
           >
-            <span className="filter-dropdown-checkbox" aria-hidden="true" />
             {module.label}
-          </button>
+          </FilterOption>
         );
       })}
     </div>
@@ -197,22 +251,36 @@ function ModuleOptions({ scannedModules, filterModules, toggleModule }) {
 
 function UserOptions({ scannedUsers, filterUsers, toggleUser }) {
   return (
-    <div className="filter-dropdown-options" aria-label="Filter report users">
+    <div className="flex max-h-60 flex-col gap-0.5 overflow-y-auto" aria-label="Filter report users">
       {scannedUsers.map((owner) => {
         const isActive = filterUsers.length === 0 || filterUsers.includes(owner.ownerKey);
         return (
-          <button
+          <FilterOption
             key={owner.ownerKey}
-            type="button"
-            className="filter-dropdown-option filter-dropdown-option-checkbox"
-            aria-pressed={isActive}
+            pressed={isActive}
             onClick={() => toggleUser(owner.ownerKey)}
           >
-            <span className="filter-dropdown-checkbox" aria-hidden="true" />
             {owner.ownerName}
-          </button>
+          </FilterOption>
         );
       })}
+    </div>
+  );
+}
+
+function Readout({ label, value, title, wrap = false }) {
+  return (
+    <div className="flex min-w-0 flex-col justify-center gap-px px-2.5 py-0.5">
+      <span className="eyebrow">{label}</span>
+      <span
+        className={cn(
+          "text-xs font-semibold text-ink",
+          wrap ? "whitespace-normal" : "truncate"
+        )}
+        title={title ?? (typeof value === "string" ? value : undefined)}
+      >
+        {value}
+      </span>
     </div>
   );
 }
@@ -238,95 +306,110 @@ function FilterCommand({
 }) {
   const isSheet = variant === "sheet";
 
-  return (
-    <div
-      className={`filter-command filter-command-${variant}${
-        !isSheet && !showUsers ? " filter-command-no-users" : ""
-      }`}
-    >
-      <div className="filter-control filter-control-period">
-        <span className="eyebrow">Period</span>
-        <span className="filter-control-value filter-control-period-value mono" title={rangeLabel}>
-          <span className="filter-period-full">{rangeLabel}</span>
-          <span className="filter-period-compact">{rangeLabelCompact ?? rangeLabel}</span>
-        </span>
+  const moduleControl = isSheet ? (
+    <div className="flex min-w-0 flex-col gap-2">
+      <span className="eyebrow">Modules</span>
+      <span className="text-xs font-medium whitespace-normal text-ink">{modulesValueLabel}</span>
+      <div className="bg-surface-sunken p-1.5 ring-1 ring-line">
+        <ModuleOptions
+          scannedModules={scannedModules}
+          filterModules={filterModules}
+          toggleModule={toggleModule}
+        />
       </div>
+    </div>
+  ) : (
+    <FilterDropdown
+      label="Modules"
+      valueLabel={modulesValueLabel}
+      isOpen={openMenu === "modules"}
+      onToggle={() => setOpenMenu(openMenu === "modules" ? null : "modules")}
+      onClose={() => setOpenMenu(null)}
+    >
+      <ModuleOptions
+        scannedModules={scannedModules}
+        filterModules={filterModules}
+        toggleModule={toggleModule}
+      />
+    </FilterDropdown>
+  );
 
-      {isSheet ? (
-        <div className="filter-control filter-control-stack">
-          <span className="eyebrow">Modules</span>
-          <span className="filter-control-value">{modulesValueLabel}</span>
-          <ModuleOptions
-            scannedModules={scannedModules}
-            filterModules={filterModules}
-            toggleModule={toggleModule}
-          />
-        </div>
-      ) : (
-        <FilterDropdown
-          label="Modules"
-          valueLabel={modulesValueLabel}
-          isOpen={openMenu === "modules"}
-          onToggle={() => setOpenMenu(openMenu === "modules" ? null : "modules")}
-          onClose={() => setOpenMenu(null)}
-        >
-          <ModuleOptions
-            scannedModules={scannedModules}
-            filterModules={filterModules}
-            toggleModule={toggleModule}
-          />
-        </FilterDropdown>
-      )}
-
-      {showUsers && (
-        isSheet ? (
-          <div className="filter-control filter-control-stack">
-            <span className="eyebrow">Users</span>
-            <span className="filter-control-value">{usersValueLabel}</span>
-            {usersEnabled ? (
-              <UserOptions
-                scannedUsers={scannedUsers}
-                filterUsers={filterUsers}
-                toggleUser={toggleUser}
-              />
-            ) : (
-              <p className="filter-sheet-note">
-                User analytics were not measured in this scan.
-              </p>
-            )}
-          </div>
-        ) : (
-          <FilterDropdown
-            label="Users"
-            valueLabel={usersValueLabel}
-            isOpen={openMenu === "users"}
-            onToggle={() => setOpenMenu(openMenu === "users" ? null : "users")}
-            onClose={() => setOpenMenu(null)}
-            disabled={!usersEnabled}
-          >
+  const userControl = showUsers && (
+    isSheet ? (
+      <div className="flex min-w-0 flex-col gap-2">
+        <span className="eyebrow">Users</span>
+        <span className="text-xs font-medium whitespace-normal text-ink">{usersValueLabel}</span>
+        {usersEnabled ? (
+          <div className="bg-surface-sunken p-1.5 ring-1 ring-line">
             <UserOptions
               scannedUsers={scannedUsers}
               filterUsers={filterUsers}
               toggleUser={toggleUser}
             />
-          </FilterDropdown>
-        )
-      )}
+          </div>
+        ) : (
+          <p className="text-xs leading-snug text-ink-muted">
+            User analytics were not measured in this scan.
+          </p>
+        )}
+      </div>
+    ) : (
+      <FilterDropdown
+        label="Users"
+        valueLabel={usersValueLabel}
+        isOpen={openMenu === "users"}
+        onToggle={() => setOpenMenu(openMenu === "users" ? null : "users")}
+        onClose={() => setOpenMenu(null)}
+        disabled={!usersEnabled}
+      >
+        <UserOptions
+          scannedUsers={scannedUsers}
+          filterUsers={filterUsers}
+          toggleUser={toggleUser}
+        />
+      </FilterDropdown>
+    )
+  );
 
-      <div className="filter-control filter-control-compare">
-        <span className="eyebrow">Attribution</span>
-        <span
-          className="filter-control-value filter-control-strong"
+  if (isSheet) {
+    return (
+      <div className="flex w-full min-w-0 flex-col gap-5">
+        <Readout label="Period" value={rangeLabel} title={rangeLabel} wrap />
+        {moduleControl}
+        {userControl}
+        <Readout
+          label="Attribution"
+          value={clockLabel}
           title="Attribution is set when the scan starts. Start a new scan to change created vs modified date."
-        >
-          {clockLabel}
-        </span>
+          wrap
+        />
+        <Readout label="Compare" value={compareLabel} wrap />
       </div>
+    );
+  }
 
-      <div className="filter-control filter-control-compare">
-        <span className="eyebrow">Compare</span>
-        <span className="filter-control-value filter-control-strong">{compareLabel}</span>
-      </div>
+  return (
+    <div
+      className={cn(
+        "grid min-w-0 w-full divide-x divide-line @max-[760px]:hidden",
+        showUsers
+          ? "grid-cols-[minmax(8rem,1.5fr)_repeat(4,minmax(5rem,1fr))]"
+          : "grid-cols-[minmax(8rem,1.5fr)_repeat(3,minmax(5rem,1fr))]"
+      )}
+    >
+      <Readout
+        label="Period"
+        value={rangeLabelCompact ?? rangeLabel}
+        title={rangeLabel}
+      />
+      {moduleControl}
+      {userControl}
+      <Readout
+        label="Attribution"
+        value={clockLabel}
+        title="Attribution is set when the scan starts. Start a new scan to change created vs modified date."
+      />
+      <Readout label="Compare" value={compareLabel} />
     </div>
   );
 }
@@ -347,17 +430,21 @@ export default function FilterBar() {
   }
 
   return (
-    <header className="filter-bar">
-      <ContentContainer className="filter-bar-inner">
-        <div className="filter-bar-lead">
-          <button type="button" className="filter-bar-back" onClick={showHome}>
+    <header className="min-w-0">
+      <ContentContainer className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 py-[var(--app-bar-padding-block,6px)] @max-[760px]:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Button type="button" variant="outline" size="sm" onClick={showHome}>
             <span aria-hidden="true">←</span> Reports
-          </button>
-
-          <div className="filter-bar-title-block">
-            <h1>{filters.displayedModules.map((module) => module.label).join(" + ") || "Analytics"}</h1>
+          </Button>
+          <div className="min-w-0 border-r border-line pr-2.5 @max-[900px]:border-r-0 @max-[900px]:pr-0">
+            <h1 className="max-w-[clamp(96px,14cqi,200px)] truncate text-[13px] leading-tight font-semibold">
+              {filters.displayedModules.map((module) => module.label).join(" + ") || "Analytics"}
+            </h1>
             {filters.accountLabel && (
-              <p className="filter-bar-subtitle" title={filters.accountLabel}>
+              <p
+                className="mt-0.5 hidden max-w-[clamp(96px,14cqi,200px)] truncate text-[11px] text-ink-muted @min-[901px]:block"
+                title={filters.accountLabel}
+              >
                 {filters.accountLabel} · {filters.depthLabel} scan
               </p>
             )}
@@ -366,31 +453,31 @@ export default function FilterBar() {
 
         <FilterCommand variant="bar" {...filters} />
 
-        <div className="filter-bar-toolbar">
+        <div className="flex items-center gap-2">
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="filter-bar-mobile-trigger"
+              className="hidden @max-[760px]:inline-flex print:hidden"
               onClick={() => setSheetOpen(true)}
             >
               <SlidersHorizontal />
               Filters · {filters.filterCount}
             </Button>
-            <SheetContent side="right" className="filter-sheet" showCloseButton>
+            <SheetContent side="right" className="bg-surface text-ink" showCloseButton>
               <SheetHeader>
                 <SheetTitle>Report filters</SheetTitle>
                 <SheetDescription>
                   Changes apply immediately to the current report.
                 </SheetDescription>
               </SheetHeader>
-              <div className="filter-sheet-body">
+              <div className="min-h-0 flex-1 overflow-auto px-4 pb-2">
                 <FilterCommand variant="sheet" {...filters} />
               </div>
               <SheetFooter>
                 <SheetClose asChild>
-                  <Button type="button" className="filter-sheet-done">
+                  <Button type="button" className="w-full">
                     Done
                   </Button>
                 </SheetClose>
@@ -398,13 +485,13 @@ export default function FilterBar() {
             </SheetContent>
           </Sheet>
 
-          <div className="filter-bar-actions">
-            <button type="button" className="filter-bar-action" onClick={handlePrint}>
+          <div className="flex items-center gap-1">
+            <Button type="button" variant="ghost" size="sm" onClick={handlePrint}>
               Print
-            </button>
-            <button type="button" className="filter-bar-action filter-bar-action-caret" onClick={handleExport}>
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={handleExport}>
               Export <ChevronIcon />
-            </button>
+            </Button>
           </div>
         </div>
       </ContentContainer>

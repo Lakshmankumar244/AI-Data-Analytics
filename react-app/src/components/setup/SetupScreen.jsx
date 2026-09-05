@@ -3,7 +3,9 @@ import { useAppState, useActions, useAppDispatch } from "../../state/AppContext"
 import * as api from "../../data/client";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
 import { formatReportPeriod } from "../../utils/format";
-import { ContentContainer, PageHeader } from "../layout";
+import { cn } from "@/lib/utils";
+import { ContentContainer } from "../layout";
+import { Button } from "@/components/ui/button";
 import AccessibleModulesList from "./AccessibleModulesList";
 import ConnectZohoPanel from "./ConnectZohoPanel";
 import DepthSelector from "./DepthSelector";
@@ -11,22 +13,47 @@ import ClockToggle from "./ClockToggle";
 import { DateRangeField, DateRangePresets, RANGE_LABELS } from "./DateRangePicker";
 import CostEstimate from "./CostEstimate";
 import LoadingState from "../shared/LoadingState";
-import "./SetupScreen.css";
 
-function SetupSection({ step, title, children }) {
+function SetupStep({ step, title, lede, last = false, children }) {
   const headingId = `setup-step-${step}-title`;
+  const index = String(step).padStart(2, "0");
   return (
-    <section className="panel setup-section" aria-labelledby={headingId}>
-      <header className="setup-section-header">
-        <span className="setup-step-index" aria-hidden="true">
-          {step}
+    <section
+      className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-x-5 sm:grid-cols-[3rem_minmax(0,1fr)] sm:gap-x-7"
+      aria-labelledby={headingId}
+    >
+      <div className="relative flex flex-col items-center" aria-hidden="true">
+        <span className="font-heading text-xl font-semibold tracking-tight text-brand sm:text-2xl">
+          {index}
         </span>
-        <h2 id={headingId} className="section-heading">
+        {!last && (
+          <span className="mt-3 w-px flex-1 bg-line" />
+        )}
+      </div>
+      <div className={cn("min-w-0", last ? "pb-2" : "pb-12 sm:pb-16")}>
+        <h2
+          id={headingId}
+          className="font-heading text-xl font-semibold tracking-tight text-ink sm:text-2xl"
+        >
           {title}
         </h2>
-      </header>
-      <div className="setup-section-body">{children}</div>
+        {lede && (
+          <p className="mt-1.5 max-w-[52ch] text-sm leading-relaxed text-ink-soft">
+            {lede}
+          </p>
+        )}
+        <div className="mt-6 flex min-w-0 flex-col gap-6">{children}</div>
+      </div>
     </section>
+  );
+}
+
+function DockStat({ label, children }) {
+  return (
+    <div className="min-w-0">
+      <p className="eyebrow">{label}</p>
+      <p className="mt-1 text-[13px] font-medium text-ink">{children}</p>
+    </div>
   );
 }
 
@@ -36,6 +63,16 @@ function periodSummary(range) {
   if (range?.id && RANGE_LABELS[range.id]) return RANGE_LABELS[range.id];
   if (range?.id === "custom") return "Custom range";
   return range?.id || "Period not set";
+}
+
+function orgInitials(label) {
+  const parts = String(label || "")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return String(label || "ZH").slice(0, 2).toUpperCase();
 }
 
 export default function SetupScreen() {
@@ -99,20 +136,24 @@ export default function SetupScreen() {
   }
 
   if (connection === "loading") {
-    return <LoadingState label="Checking your connection" />;
+    return (
+      <ContentContainer className="flex min-h-0 w-full flex-1 flex-col py-8">
+        <LoadingState label="Checking your connection" />
+      </ContentContainer>
+    );
   }
 
   if (connecting) {
-    return <LoadingState label="Redirecting to Zoho" />;
+    return (
+      <ContentContainer className="flex min-h-0 w-full flex-1 flex-col py-8">
+        <LoadingState label="Redirecting to Zoho" />
+      </ContentContainer>
+    );
   }
 
   if (!connection) {
     return (
-      <ContentContainer className="setup-screen">
-        <PageHeader
-          title="Check your data health"
-          description="Connect your Zoho account to see what your login can access."
-        />
+      <ContentContainer className="flex min-h-full flex-col justify-center py-12 sm:py-16">
         <ConnectZohoPanel onConnect={handleConnect} connecting={connecting} notice={connectionNotice} />
       </ContentContainer>
     );
@@ -177,110 +218,123 @@ export default function SetupScreen() {
   const connectedName =
     connection.connectedUser?.name || connection.connectedUser?.email;
   const moduleCount = scanConfig.modules.length;
+  const canStart = moduleCount > 0 && !starting;
 
   return (
-    <ContentContainer className="setup-screen">
-      <div className="setup-workspace">
-        <SetupSection step={1} title="Org and depth">
-          <div className="setup-field-row">
-            <div className="setup-field">
-              <p className="eyebrow">Client org</p>
-              <div className="setup-field-control setup-field-control-readonly">
+    <ContentContainer className="flex min-h-full min-w-0 flex-col pt-8 sm:pt-10">
+      <p className="max-w-[40rem] text-sm leading-relaxed text-ink-soft">
+        Three decisions, then a read-only pass over what this login can see.
+        Nothing in Zoho is created, updated, or deleted.
+      </p>
+
+      <div className="mt-10 min-w-0 flex-1 sm:mt-12">
+        <SetupStep
+          step={1}
+          title="Who, and how deep"
+          lede="The connected org is fixed for this run. Depth caps how many records we read in each module."
+        >
+          <div className="flex items-start gap-4">
+            <div
+              className="grid size-11 shrink-0 place-items-center bg-brand-soft font-heading text-sm font-semibold tracking-wide text-brand-strong"
+              aria-hidden="true"
+            >
+              {orgInitials(organizationLabel)}
+            </div>
+            <div className="min-w-0">
+              <p className="font-heading text-lg font-semibold tracking-tight text-ink">
                 {organizationLabel}
-              </div>
+              </p>
               {connectedName && (
-                <p className="setup-org-meta">
-                  Connected as <strong>{connectedName}</strong>. This scans only
-                  what your account can see in Zoho CRM.
+                <p className="mt-0.5 text-[13px] text-ink-soft">
+                  Connected as {connectedName}. Visibility follows this login,
+                  not the whole org.
                 </p>
               )}
-              <button
+              <Button
                 type="button"
-                className="setup-connect-another"
+                variant="link"
+                className="mt-1 h-auto px-0 text-[13px]"
                 onClick={handleConnect}
                 disabled={connecting}
               >
-                + Connect to another organization
-              </button>
+                Connect another organization
+              </Button>
             </div>
-            <DepthSelector
-              value={scanConfig.depth}
-              onChange={(depth) => setScanConfig({ depth })}
-            />
           </div>
-        </SetupSection>
+          <DepthSelector
+            value={scanConfig.depth}
+            onChange={(depth) => setScanConfig({ depth })}
+          />
+        </SetupStep>
 
-        <SetupSection step={2} title="Period">
+        <SetupStep
+          step={2}
+          title="Which records count"
+          lede="Period is the window. Clock is whether we use created time or last modified time."
+        >
           <DateRangePresets
             value={scanConfig.range}
             onChange={(range) => setScanConfig({ range })}
           />
-          <div className="setup-field-row">
+          {scanConfig.range?.id === "custom" && (
             <DateRangeField
               value={scanConfig.range}
               onChange={(range) => setScanConfig({ range })}
             />
-            <ClockToggle
-              value={scanConfig.clock}
-              onChange={(clock) => setScanConfig({ clock })}
-            />
-          </div>
-        </SetupSection>
+          )}
+          <ClockToggle
+            value={scanConfig.clock}
+            onChange={(clock) => setScanConfig({ clock })}
+          />
+        </SetupStep>
 
-        <SetupSection step={3} title="Modules">
+        <SetupStep
+          step={3}
+          title="What to include"
+          lede="Only modules visible under this Zoho login are listed. A small count usually means profile visibility, not an empty module."
+          last
+        >
           <AccessibleModulesList
             modules={connection.accessibleModules}
             selected={scanConfig.modules}
             onToggle={toggleModule}
             onSelectAll={selectAllModules}
           />
-        </SetupSection>
+        </SetupStep>
+      </div>
 
-        <section className="panel setup-summary" aria-labelledby="setup-summary-title">
-          <header className="setup-section-header">
-            <h2 id="setup-summary-title" className="section-heading">
-              Scan summary
-            </h2>
-          </header>
-          <div className="setup-summary-bar">
-            <p className="setup-summary-facts">
-              <span>
-                {moduleCount} {moduleCount === 1 ? "module" : "modules"}
-              </span>
-              <span className="setup-summary-sep" aria-hidden="true">
-                |
-              </span>
-              <span>{periodSummary(scanConfig.range)}</span>
-              <span className="setup-summary-sep" aria-hidden="true">
-                |
-              </span>
-              <CostEstimate estimate={estimate} loading={estimating} />
-            </p>
-            <div className="setup-actions">
-              {scanHistory.length > 0 && (
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  disabled={starting}
-                  onClick={() => dispatch({ type: "showHome" })}
-                >
-                  Back to reports
-                </button>
-              )}
-              <button
+      <div className="sticky bottom-0 z-20 -mx-[var(--app-gutter)] mt-8 border-t border-line bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-[var(--app-gutter)] py-4 backdrop-blur-md">
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <dl className="m-0 grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+            <DockStat label="Modules">
+              {moduleCount} {moduleCount === 1 ? "module" : "modules"}
+            </DockStat>
+            <DockStat label="Period">{periodSummary(scanConfig.range)}</DockStat>
+            <CostEstimate estimate={estimate} loading={estimating} />
+          </dl>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {scanHistory.length > 0 && (
+              <Button
                 type="button"
-                className="btn btn-primary"
-                disabled={!scanConfig.modules.length || starting}
-                onClick={handleStart}
+                variant="ghost"
+                size="lg"
+                disabled={starting}
+                onClick={() => dispatch({ type: "showHome" })}
               >
-                {starting ? "Starting\u2026" : "Start scan"}
-              </button>
-            </div>
+                Back to reports
+              </Button>
+            )}
+            <Button
+              type="button"
+              size="lg"
+              className="min-w-[9.5rem]"
+              disabled={!canStart}
+              onClick={handleStart}
+            >
+              {starting ? "Starting\u2026" : "Start scan"}
+            </Button>
           </div>
-          <p className="cost-estimate-scope">
-            Read-only access. Nothing in your CRM is changed by running this scan.
-          </p>
-        </section>
+        </div>
       </div>
     </ContentContainer>
   );

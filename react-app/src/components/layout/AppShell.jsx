@@ -26,6 +26,9 @@ function persistCollapsed(collapsed) {
 
   The rail used to be a slotted progress widget. The shell now owns the
   product navigation so every screen sits inside one consistent frame.
+
+  `app-shell-collapsed` / `app-shell-nav-open` stay as class hooks: ThemeToggle
+  and the rail query them, and they override `--app-rail-width` for descendants.
 */
 export function AppShell({ className, children, ...props }) {
   const [collapsed, setCollapsedState] = useState(readCollapsed);
@@ -48,9 +51,12 @@ export function AppShell({ className, children, ...props }) {
   return (
     <div
       className={cn(
-        "app-shell",
+        "app-shell group/shell flex h-[100vh] supports-[height:100dvh]:h-[100dvh] min-w-0 items-stretch bg-paper print:h-auto print:overflow-visible",
         collapsed && "app-shell-collapsed",
+        collapsed && "[--app-rail-width:var(--app-rail-collapsed)]",
         mobileOpen && "app-shell-nav-open",
+        "max-[1180px]:[--app-rail-width:var(--app-rail-collapsed)]",
+        "max-[760px]:![--app-rail-width:0px]",
         className
       )}
       {...props}
@@ -64,7 +70,10 @@ export function AppShell({ className, children, ...props }) {
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
       />
-      <div className="app-frame" inert={mobileOpen || undefined}>
+      <div
+        className="flex min-h-0 min-w-0 flex-1 flex-col print:h-auto print:overflow-visible"
+        inert={mobileOpen || undefined}
+      >
         <AppHeader mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
         {children}
       </div>
@@ -80,7 +89,15 @@ export function AppShell({ className, children, ...props }) {
 */
 export function MainContent({ className, children, ...props }) {
   return (
-    <main id="app-main" className={cn("app-main", className)} tabIndex={-1} {...props}>
+    <main
+      id="app-main"
+      className={cn(
+        "@container/app-main flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto overscroll-contain print:h-auto print:overflow-visible",
+        className
+      )}
+      tabIndex={-1}
+      {...props}
+    >
       {children}
     </main>
   );

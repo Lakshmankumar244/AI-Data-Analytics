@@ -24,7 +24,6 @@ import {
 } from "../../../data/ownerAnalytics";
 import { formatReportDate } from "../../../utils/format";
 import { Button } from "@/components/ui/button";
-import "./OverviewTab.css";
 
 const CLOCK_LABELS = {
   created: "Created date",
@@ -120,8 +119,8 @@ export default function OverviewTab() {
   );
 
   return (
-    <div className="overview-tab">
-      <div className="overview-executive">
+    <div className="flex min-w-0 flex-col gap-6 py-4 pb-12 @max-[560px]:gap-4">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] items-stretch gap-6 @max-[1180px]:grid-cols-1">
         <OverviewHealthHero
           overallScore={overallScore}
           priorScore={priorScore}
@@ -151,14 +150,16 @@ export default function OverviewTab() {
         possiblePoints={possiblePoints}
       />
 
-      <div className="overview-quality">
-        <section className="panel">
-          <div className="panel-header">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-6 @max-[1180px]:grid-cols-1">
+        <section className="min-w-0">
+          <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="eyebrow">Record states</p>
-              <h2>How records are classified</h2>
+              <h2 className="mt-1 font-heading text-lg font-semibold tracking-tight text-ink">
+                How records are classified
+              </h2>
             </div>
-            <div className="overview-panel-actions">
+            <div className="ml-auto flex flex-wrap gap-2 print:hidden">
               {focusState && (
                 <Button
                   type="button"
@@ -180,7 +181,7 @@ export default function OverviewTab() {
                 </Button>
               )}
             </div>
-          </div>
+          </header>
           {stateBreakdown ? (
             <StateBreakdown
               breakdown={stateBreakdown}
@@ -195,13 +196,13 @@ export default function OverviewTab() {
           )}
         </section>
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Quality dimensions</p>
-              <h2>Scores by area</h2>
-            </div>
-          </div>
+        <section className="min-w-0">
+          <header className="mb-5">
+            <p className="eyebrow">Quality dimensions</p>
+            <h2 className="mt-1 font-heading text-lg font-semibold tracking-tight text-ink">
+              Scores by area
+            </h2>
+          </header>
           <DomainScoreBars
             domainScores={domainScores}
             unmeasuredDomains={unmeasuredDomains}
@@ -209,7 +210,7 @@ export default function OverviewTab() {
         </section>
       </div>
 
-      <div className="overview-context">
+      <div className="grid min-w-0 grid-cols-3 items-stretch gap-6 @max-[1180px]:grid-cols-1">
         <OverviewCreatedPeriod
           series={createdInPeriod ?? []}
           periodFrom={periodFrom}
@@ -218,14 +219,14 @@ export default function OverviewTab() {
           depthLabel={depthLabel}
         />
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <p className="eyebrow">Biggest movers</p>
-              <h2>Since the last check</h2>
-            </div>
-          </div>
-          <div className="overview-context-body overview-movers-scroll">
+        <section className="flex h-[380px] min-w-0 flex-col overflow-hidden">
+          <header className="mb-3 shrink-0">
+            <p className="eyebrow">Biggest movers</p>
+            <h2 className="mt-1 font-heading text-lg font-semibold tracking-tight text-ink">
+              Since the last check
+            </h2>
+          </header>
+          <div className="min-h-0 flex-1 overflow-auto">
             <MoversList movers={visibleMovers} />
           </div>
         </section>

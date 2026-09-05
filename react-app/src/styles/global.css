@@ -1,18 +1,10 @@
 /*
-  Tailwind is imported WITHOUT Preflight while the legacy screens are still
-  hand-written CSS. Preflight is a global reset (it drops heading sizes, list
-  markers, link styling and UA control chrome) and every existing screen was
-  authored against those defaults, so enabling it now would restyle the whole
-  app before any screen has been migrated. Swap the two imports below for a
-  plain `@import "tailwindcss";` once the screens move to utilities.
-
-  Note on the cascade: everything Tailwind emits is inside a layer, and all of
-  the app's own CSS is unlayered, so app rules always win over Tailwind's base
-  layer regardless of specificity.
+  Tailwind includes Preflight in `@layer base`. Product document, type, focus,
+  and skip-link rules below stay unlayered so they still win where they overlap
+  Preflight (height/overflow on the root, body type, heading family/weight,
+  selection, and keyboard focus).
 */
-@layer theme, base, components, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
+@import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "./tokens.css";
@@ -67,40 +59,6 @@ input,
 select,
 textarea {
   font-family: var(--font-body);
-}
-
-.mono {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-/* section label — quiet metadata, not a decorative stamp */
-.eyebrow {
-  font-family: var(--font-body);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.text-meta {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--muted);
-}
-
-.text-body {
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--ink-soft);
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  box-shadow: none;
 }
 
 ::selection {
@@ -281,6 +239,20 @@ textarea {
   --radius-4xl: calc(var(--radius) * 2.6);
   --shadow-panel: var(--shadow-card);
   --shadow-floating: var(--shadow-float);
+}
+
+@utility mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility eyebrow {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 @layer base {

@@ -1,4 +1,4 @@
-import "./Band.css";
+import { cn } from "@/lib/utils";
 
 /**
  * Generic label pill. Takes a resolved { id, label, color, soft } object from
@@ -12,7 +12,14 @@ export default function Band({ band, size = "md" }) {
     : undefined;
 
   return (
-    <span className={`band band-${size}`} style={style}>
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full font-semibold tracking-wide whitespace-nowrap",
+        size === "lg" ? "px-3.5 py-1.5 text-[13px]" : "px-2 text-[11px]",
+        size === "sm" ? "py-0.5" : size === "md" ? "py-[3px]" : ""
+      )}
+      style={style}
+    >
       {band.label}
     </span>
   );

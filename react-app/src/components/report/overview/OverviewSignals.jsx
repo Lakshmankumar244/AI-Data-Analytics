@@ -17,7 +17,10 @@ export default function OverviewSignals({
   onOpenUsers,
 }) {
   return (
-    <section className="overview-signals" aria-label="Attention signals">
+    <section
+      className="grid min-w-0 grid-cols-2 gap-4 @max-[560px]:grid-cols-1"
+      aria-label="Attention signals"
+    >
       <OverviewKpiCard
         label="Clean records"
         value={cleanRecords}

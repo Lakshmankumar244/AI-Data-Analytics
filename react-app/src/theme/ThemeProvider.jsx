@@ -13,7 +13,7 @@ const ThemeContext = createContext(null);
 /**
  * Owns the `.dark` class on <html> and persists the user's choice.
  *
- * The application header and sidebar drive this through ThemeToggle.
+ * The application sidebar drives this through ThemeToggle.
  */
 export function ThemeProvider({ children, defaultTheme = DEFAULT_THEME }) {
   const [theme, setThemeState] = useState(() =>

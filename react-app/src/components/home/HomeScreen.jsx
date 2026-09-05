@@ -3,11 +3,12 @@ import { useAppDispatch, useAppState } from "../../state/AppContext";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
 import { activateConnection, getScanHistory, getScanResults, ZOHO_CONSENT_URL } from "../../data/client";
 import { formatNumber } from "../../utils/format";
+import { cn } from "@/lib/utils";
 import { ContentContainer, PageHeader } from "../layout";
+import { Button } from "@/components/ui/button";
 import Band from "../shared/Band";
 import Dropdown from "../shared/Dropdown";
 import LoadingState from "../shared/LoadingState";
-import "./HomeScreen.css";
 
 const COMPLETED_BAND = {
   id: "completed",
@@ -36,18 +37,33 @@ function ModuleSummary({ modules }) {
   const visible = expanded ? modules : modules.slice(0, 3);
   const remaining = modules.length - visible.length;
   return (
-    <div className="history-modules">
+    <div className="max-w-[280px]">
       <span>{visible.join(", ") || "—"}</span>
       {modules.length > 3 && (
         <button
           type="button"
-          className="history-modules-toggle"
+          className="ml-1.5 inline border-0 bg-transparent p-0 font-[inherit] text-brand hover:underline"
           onClick={() => setExpanded((current) => !current)}
         >
           {expanded ? "Show less" : `+ ${remaining} more`}
         </button>
       )}
     </div>
+  );
+}
+
+function ScanStatus({ status }) {
+  if (status === "COMPLETED") return <Band band={COMPLETED_BAND} />;
+  const failed = status === "FAILED_TERMINAL";
+  return (
+    <span
+      className={cn(
+        "inline-block rounded-sm px-1.5 py-0.5 font-mono text-[11px]",
+        failed ? "bg-risk-soft text-risk" : "bg-surface-sunken text-ink-soft"
+      )}
+    >
+      {status}
+    </span>
   );
 }
 
@@ -149,25 +165,28 @@ export default function HomeScreen() {
 
   if (connection === "loading") {
     return (
-      <ContentContainer className="home-screen">
+      <ContentContainer className="flex min-h-0 w-full flex-1 flex-col py-6">
         <LoadingState label="Restoring your account" />
       </ContentContainer>
     );
   }
 
+  const connectedAs =
+    connection?.connectedUser?.name || connection?.connectedUser?.email;
+
   return (
-    <ContentContainer className="home-screen">
+    <ContentContainer className="py-5 pb-8">
       <PageHeader
-        // eyebrow="Data health"
-        // title="Reports and scans"
-        // description={
-        //   connection
-        //     ? `Connected to ${connection.organizationName || "Zoho CRM"} as ${connection.connectedUser.name || connection.connectedUser.email}.`
-        //     : "Connect Zoho CRM to start a new scan."
-        // }
+        description={
+          connection
+            ? `Connected to ${connection.organizationName || "Zoho CRM"}${
+                connectedAs ? ` as ${connectedAs}` : ""
+              }.`
+            : "Connect Zoho CRM to start a new scan."
+        }
         actions={
           connection ? (
-            <div className="home-actions">
+            <div className="flex min-w-0 flex-wrap items-end justify-end gap-x-3 gap-y-2">
               {connection.availableConnections?.length > 1 && (
                 <Dropdown
                   label="New scans use"
@@ -182,44 +201,49 @@ export default function HomeScreen() {
                   }))}
                 />
               )}
-              <div className="home-actions-buttons">
-                <button
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
                   type="button"
-                  className="btn btn-secondary"
+                  variant="outline"
+                  size="lg"
                   onClick={() => window.location.assign(ZOHO_CONSENT_URL)}
                 >
                   Connect another Zoho account
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
-                  className="btn btn-primary"
+                  size="lg"
                   onClick={() => dispatch({ type: "showSetup" })}
                 >
                   New scan
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
-            <button
+            <Button
               type="button"
-              className="btn btn-primary"
+              size="lg"
               onClick={() => dispatch({ type: "showSetup" })}
             >
               Connect Zoho CRM
-            </button>
+            </Button>
           )
         }
       />
 
-      {connectionNotice && <p className="home-notice">{connectionNotice}</p>}
+      {connectionNotice && (
+        <p className="mb-3 text-[13px] text-ink-soft">{connectionNotice}</p>
+      )}
 
-      <section className="panel history-panel">
-        <div className="panel-header">
+      <section className="min-w-0 rounded-md border border-line bg-surface p-4 sm:p-5">
+        <div className="mb-3 flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
           <div>
             <p className="eyebrow">History</p>
-            <h2>Past scans</h2>
+            <h2 className="mt-0.5 font-heading text-lg font-semibold tracking-tight text-ink">
+              Past scans
+            </h2>
           </div>
-          <div className="history-tools">
+          <div className="flex items-end gap-3">
             {historyConnections.length > 1 && (
               <Dropdown
                 label="Show reports from"
@@ -236,32 +260,39 @@ export default function HomeScreen() {
                 ]}
               />
             )}
-            <span className="history-count mono">
+            <span className="mono text-ink-muted">
               {visibleScans.length}
               {historyConnectionId !== "all" ? ` / ${scanHistory.length}` : ""}
             </span>
           </div>
         </div>
 
-        {error && <p className="home-error" role="alert">{error}</p>}
+        {error && (
+          <p className="mb-3 text-[13px] text-risk" role="alert">
+            {error}
+          </p>
+        )}
         {visibleScans.length === 0 ? (
-          <p className="history-empty">
+          <p className="rounded-md border border-dashed border-line px-4 py-8 text-center text-[13px] text-ink-muted">
             {scanHistory.length === 0
               ? "No scans have been created for this user yet."
               : "No scans have been created with this Zoho account."}
           </p>
         ) : (
-          <div className="history-table-wrap">
-            <table className="history-table">
+          <div className="min-w-0 overflow-x-auto overscroll-x-contain">
+            <table className="w-full min-w-[720px] border-collapse text-[13px]">
               <thead>
                 <tr>
-                  <th>Zoho account</th>
-                  <th>Email</th>
-                  <th>Modules</th>
-                  <th>Records</th>
-                  <th>Created</th>
-                  <th>Status</th>
-                  <th>Action</th>
+                  {["Zoho account", "Email", "Modules", "Records", "Created", "Status", "Action"].map(
+                    (heading) => (
+                      <th
+                        key={heading}
+                        className="px-2.5 py-1.5 text-left text-[11px] font-semibold tracking-wider text-ink-muted uppercase"
+                      >
+                        {heading}
+                      </th>
+                    )
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -274,44 +305,49 @@ export default function HomeScreen() {
                     "Unknown account";
                   const accountEmail = scan.connection?.email || "—";
                   return (
-                    <tr key={scan.scanId}>
-                      <td>
-                        <span className="history-account-name">{accountName}</span>
+                    <tr
+                      key={scan.scanId}
+                      className="border-t border-line hover:bg-surface-sunken"
+                    >
+                      <td className="px-2.5 py-1.5 align-middle">
+                        <span className="font-semibold text-ink">{accountName}</span>
                       </td>
-                      <td>
-                        <span className="history-account-email">{accountEmail}</span>
+                      <td className="px-2.5 py-1.5 align-middle">
+                        <span className="text-xs text-ink-muted">{accountEmail}</span>
                       </td>
-                      <td><ModuleSummary modules={scan.modules} /></td>
-                      <td className="mono">{formatNumber(scan.recordCount)}</td>
-                      <td className="history-created">{readableDate(scan.createdAt)}</td>
-                      <td>
-                        {scan.status === "COMPLETED" ? (
-                          <Band band={COMPLETED_BAND} />
-                        ) : (
-                          <span className={`history-status history-status-${String(scan.status).toLowerCase()}`}>
-                            {scan.status}
-                          </span>
-                        )}
+                      <td className="px-2.5 py-1.5 align-middle">
+                        <ModuleSummary modules={scan.modules} />
                       </td>
-                      <td className="history-action">
+                      <td className="mono px-2.5 py-1.5 align-middle">
+                        {formatNumber(scan.recordCount)}
+                      </td>
+                      <td className="px-2.5 py-1.5 align-middle whitespace-nowrap text-ink-soft">
+                        {readableDate(scan.createdAt)}
+                      </td>
+                      <td className="px-2.5 py-1.5 align-middle">
+                        <ScanStatus status={scan.status} />
+                      </td>
+                      <td className="px-2.5 py-1.5 text-right align-middle whitespace-nowrap">
                         {canOpen && (
-                          <button
+                          <Button
                             type="button"
-                            className="btn btn-secondary"
+                            variant="outline"
+                            size="sm"
                             disabled={openingScanId === scan.scanId}
                             onClick={() => openReport(scan)}
                           >
                             {openingScanId === scan.scanId ? "Opening…" : "Open report"}
-                          </button>
+                          </Button>
                         )}
                         {canResume && (
-                          <button
+                          <Button
                             type="button"
-                            className="btn btn-secondary"
+                            variant="outline"
+                            size="sm"
                             onClick={() => resumeScan(scan)}
                           >
                             Resume
-                          </button>
+                          </Button>
                         )}
                       </td>
                     </tr>

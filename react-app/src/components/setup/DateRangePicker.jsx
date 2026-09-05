@@ -1,4 +1,5 @@
 import { formatReportPeriod } from "../../utils/format";
+import { cn } from "@/lib/utils";
 
 export const QUICK_RANGES = [
   { id: "7d", label: "7 days" },
@@ -27,27 +28,42 @@ function fromDateInputValue(value) {
 }
 
 export function DateRangePresets({ value, onChange }) {
+  const options = [...QUICK_RANGES, { id: "custom", label: "Custom" }];
   return (
-    <div className="field-row" role="group" aria-label="Date range presets">
-      {QUICK_RANGES.map((range) => (
-        <button
-          key={range.id}
-          type="button"
-          className="chip"
-          aria-pressed={value.id === range.id}
-          onClick={() => onChange({ id: range.id, from: null, to: null })}
-        >
-          {range.label}
-        </button>
-      ))}
-      <button
-        type="button"
-        className="chip"
-        aria-pressed={value.id === "custom"}
-        onClick={() => onChange({ id: "custom", from: value.from, to: value.to })}
+    <div className="min-w-0">
+      <p className="eyebrow">Period</p>
+      <div
+        className="mt-3 flex flex-wrap gap-x-5 gap-y-1"
+        role="radiogroup"
+        aria-label="Date range presets"
       >
-        Custom
-      </button>
+        {options.map((range) => {
+          const pressed = value.id === range.id;
+          return (
+            <button
+              key={range.id}
+              type="button"
+              role="radio"
+              aria-checked={pressed}
+              className={cn(
+                "border-b-2 py-2 text-[15px] font-semibold tracking-tight transition-colors",
+                pressed
+                  ? "border-brand text-ink"
+                  : "border-transparent text-ink-muted hover:border-line-strong hover:text-ink"
+              )}
+              onClick={() =>
+                onChange(
+                  range.id === "custom"
+                    ? { id: "custom", from: value.from, to: value.to }
+                    : { id: range.id, from: null, to: null }
+                )
+              }
+            >
+              {range.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -65,33 +81,29 @@ export function DateRangeField({ value, onChange }) {
     });
   }
 
+  if (!isCustom) return null;
+
   return (
-    <div className="setup-field">
-      <p className="eyebrow">Date range</p>
-      {isCustom ? (
-        <div className="setup-date-inputs">
-          <input
-            type="date"
-            className="setup-field-control"
-            aria-label="Range start"
-            value={toDateInputValue(value.from)}
-            onChange={(event) => updateBound("from", event.target.value)}
-          />
-          <span className="setup-date-inputs-sep" aria-hidden="true">
-            to
-          </span>
-          <input
-            type="date"
-            className="setup-field-control"
-            aria-label="Range end"
-            value={toDateInputValue(value.to)}
-            onChange={(event) => updateBound("to", event.target.value)}
-          />
-        </div>
-      ) : (
-        <div className="setup-field-control setup-field-control-readonly">
-          {resolvedPeriod || presetLabel || "\u2014"}
-        </div>
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <input
+        type="date"
+        className="min-h-10 min-w-0 flex-1 basis-[140px] border-0 border-b border-line-strong bg-transparent px-0 py-2 text-[13px] font-medium text-ink"
+        aria-label="Range start"
+        value={toDateInputValue(value.from)}
+        onChange={(event) => updateBound("from", event.target.value)}
+      />
+      <span className="text-xs text-ink-muted" aria-hidden="true">
+        to
+      </span>
+      <input
+        type="date"
+        className="min-h-10 min-w-0 flex-1 basis-[140px] border-0 border-b border-line-strong bg-transparent px-0 py-2 text-[13px] font-medium text-ink"
+        aria-label="Range end"
+        value={toDateInputValue(value.to)}
+        onChange={(event) => updateBound("to", event.target.value)}
+      />
+      {resolvedPeriod && (
+        <span className="sr-only">{resolvedPeriod || presetLabel}</span>
       )}
     </div>
   );

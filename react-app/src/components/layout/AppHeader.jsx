@@ -1,7 +1,7 @@
 import { Menu } from "lucide-react";
 import { useAppState } from "../../state/AppContext";
 import { ContentContainer } from "./ContentContainer";
-import { ThemeToggle } from "../shared/ThemeToggle";
+import { Button } from "@/components/ui/button";
 
 const TAB_LABELS = {
   overview: "Overview",
@@ -56,40 +56,54 @@ export function AppHeader({ mobileOpen, setMobileOpen }) {
   const meta = scanMeta(phase, scan, scanConfig);
 
   return (
-    <header className="app-header">
-      <ContentContainer className="app-header-inner">
-        <div className="app-header-lead">
-          <button
+    <header className="flex min-h-[var(--app-header-height)] min-w-0 shrink-0 items-center border-b border-line bg-surface print:!hidden [@media(max-height:640px)]:min-h-10">
+      <ContentContainer className="flex w-full flex-nowrap items-center justify-between gap-x-[var(--sp-5)] gap-y-[var(--sp-3)] py-1">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <Button
             type="button"
-            className="btn btn-ghost app-header-menu"
+            variant="ghost"
+            size="icon"
+            className="hidden size-9 max-[760px]:inline-flex"
             onClick={() => setMobileOpen(true)}
             aria-expanded={Boolean(mobileOpen)}
             aria-controls="app-sidebar"
             aria-label="Open navigation"
           >
             <Menu size={18} aria-hidden="true" />
-          </button>
-          <div className="app-header-context">
-            <p className="eyebrow app-header-kicker">{context.kicker}</p>
-            <div className="app-header-heading">
-              <p className="app-header-title">{context.title}</p>
-              {meta && <p className="app-header-meta">{meta}</p>}
+          </Button>
+          <div className="min-w-0">
+            <p className="eyebrow">{context.kicker}</p>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
+              <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold leading-tight tracking-[-0.02em] max-[560px]:max-w-[46vw]">
+                {context.title}
+              </p>
+              {meta && (
+                <p className="m-0 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-ink-muted max-[560px]:hidden">
+                  {meta}
+                </p>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="app-header-actions">
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
           {account && (
-            <div className="app-header-org" title={[account.organization, account.user].filter(Boolean).join(" · ")}>
+            <div
+              className="flex max-w-[min(280px,40cqi)] min-w-0 flex-col items-end rounded-[var(--radius-sm)] border border-line bg-paper px-2.5 py-1 max-[760px]:hidden"
+              title={[account.organization, account.user].filter(Boolean).join(" · ")}
+            >
               {account.organization && (
-                <span className="app-header-org-name">{account.organization}</span>
+                <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-xs font-semibold text-ink">
+                  {account.organization}
+                </span>
               )}
               {account.user && (
-                <span className="app-header-org-user">{account.user}</span>
+                <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-ink-muted">
+                  {account.user}
+                </span>
               )}
             </div>
           )}
-          <ThemeToggle compact />
         </div>
       </ContentContainer>
     </header>

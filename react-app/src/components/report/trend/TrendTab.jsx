@@ -3,11 +3,27 @@ import { useAppState } from "../../../state/AppContext";
 import * as api from "../../../data/client";
 import LoadingState from "../../shared/LoadingState";
 import Dropdown from "../../shared/Dropdown";
-import LineChart from "./LineChart";
+import LineChart, { trendSeriesColor } from "./LineChart";
 import { formatDelta } from "../../../utils/format";
 import { DOMAIN_LABELS } from "../../../utils/bands";
 import { TREND_GRAINS, bucketTrendSeries } from "./trendGrain";
-import "./TrendTab.css";
+import { cn } from "@/lib/utils";
+
+function TrendEmpty({ eyebrow, title, children, role }) {
+  return (
+    <div className="flex min-w-0 flex-col py-6 pb-12 @max-[640px]:py-4 @max-[640px]:pb-8">
+      <section className="min-w-0" role={role}>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1 className="mt-1 font-heading text-lg font-semibold tracking-tight text-ink">
+          {title}
+        </h1>
+        <p className="mt-2 max-w-[46ch] text-xs leading-normal text-ink-soft">
+          {children}
+        </p>
+      </section>
+    </div>
+  );
+}
 
 export default function TrendTab() {
   const { scanId, scan, filterModules } = useAppState();
@@ -53,28 +69,25 @@ export default function TrendTab() {
 
   if (error) {
     return (
-      <div className="trend-tab">
-        <section className="panel trend-state" role="alert">
-          <p className="eyebrow">Trend unavailable</p>
-          <h1>The stored scan history could not be compared</h1>
-          <p>{error}</p>
-        </section>
-      </div>
+      <TrendEmpty
+        eyebrow="Trend unavailable"
+        title="The stored scan history could not be compared"
+        role="alert"
+      >
+        {error}
+      </TrendEmpty>
     );
   }
   if (!data) return <LoadingState label="Loading trend" />;
   if (seriesGroups.length === 0) {
     return (
-      <div className="trend-tab">
-        <section className="panel trend-state">
-          <p className="eyebrow">Score over time</p>
-          <h1>No measurable trend is available yet</h1>
-          <p>
-            Complete a non-empty scan with the same modules, clock, and depth to
-            create a comparable point.
-          </p>
-        </section>
-      </div>
+      <TrendEmpty
+        eyebrow="Score over time"
+        title="No measurable trend is available yet"
+      >
+        Complete a non-empty scan with the same modules, clock, and depth to
+        create a comparable point.
+      </TrendEmpty>
     );
   }
 
@@ -101,9 +114,9 @@ export default function TrendTab() {
   ].filter((domain) => latest.measuredDomains?.includes(domain));
 
   return (
-    <div className="trend-tab">
-      <section className="panel">
-        <div className="panel-header">
+    <div className="flex min-w-0 flex-col py-6 pb-12 @max-[640px]:py-4 @max-[640px]:pb-8">
+      <section className="min-w-0">
+        <header className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <p className="eyebrow">Score over time</p>
           <Dropdown
             label="Grain"
@@ -111,12 +124,22 @@ export default function TrendTab() {
             options={TREND_GRAINS}
             onChange={setGrain}
           />
-        </div>
+        </header>
 
-        <div className="trend-legend" aria-label="Chart series">
+        <div
+          className="mb-2 flex flex-wrap justify-end gap-x-3.5 gap-y-2"
+          aria-label="Chart series"
+        >
           {seriesGroups.map((group, index) => (
-            <span key={group.moduleApiName}>
-              <i className={`trend-legend-swatch trend-series-${index % 6}`} />
+            <span
+              key={group.moduleApiName}
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-ink-soft"
+            >
+              <i
+                className="size-[9px] shrink-0 rounded-full not-italic"
+                style={{ background: trendSeriesColor(index) }}
+                aria-hidden="true"
+              />
               {group.moduleApiName}
             </span>
           ))}
@@ -127,37 +150,59 @@ export default function TrendTab() {
           averageScore={seriesGroups.length === 1 ? average : null}
         />
 
-        <p className="trend-summary">
+        <p className="mt-4 text-xs leading-normal text-ink-soft">
           {seriesGroups.length === 1 ? (
             <>
               <span className="mono">{first.score}</span> in {first.period} to{" "}
               <span className="mono">{last.score}</span> in {last.period}{" "}
-              (<span className={delta >= 0 ? "trend-up" : "trend-down"}>{formatDelta(delta)}</span>) &middot;{" "}
-              period average <span className="mono">{average.toFixed(1)}</span>
+              (
+              <span className={cn("font-bold", delta >= 0 ? "text-strong" : "text-risk")}>
+                {formatDelta(delta)}
+              </span>
+              ) &middot; period average{" "}
+              <span className="mono">{average.toFixed(1)}</span>
             </>
           ) : (
             <>
               Comparing <strong>{seriesGroups.length} modules</strong> from {first.period} to {last.period}.
-              {combinedSeries.length > 0 && <> Combined period average <span className="mono">{average.toFixed(1)}</span>.</>}
+              {combinedSeries.length > 0 && (
+                <> Combined period average <span className="mono">{average.toFixed(1)}</span>.</>
+              )}
             </>
           )}
         </p>
 
-        <div className="trend-metrics" aria-label="Latest scan metrics">
-          <div><span>Records</span><strong>{latest.recordCount.toLocaleString("en-IN")}</strong></div>
+        <div
+          className="mt-5 grid grid-cols-3 gap-x-6 gap-y-4 border-y border-line py-5 @max-[640px]:grid-cols-1"
+          aria-label="Latest scan metrics"
+        >
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[11px] font-semibold tracking-wide text-ink-muted uppercase">
+              Records
+            </span>
+            <strong className="mono text-[clamp(16px,1.7cqi,24px)] tracking-tight text-ink">
+              {latest.recordCount.toLocaleString("en-IN")}
+            </strong>
+          </div>
           {latestDomains.map((domain) => (
-            <div key={domain}>
-              <span>{DOMAIN_LABELS[domain]}</span>
-              <strong>{latest[domain]}</strong>
+            <div key={domain} className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-[11px] font-semibold tracking-wide text-ink-muted uppercase">
+                {DOMAIN_LABELS[domain]}
+              </span>
+              <strong className="mono text-[clamp(16px,1.7cqi,24px)] tracking-tight text-ink">
+                {latest[domain]}
+              </strong>
             </div>
           ))}
         </div>
 
         {allPoints.length === 1 && (
-          <p className="trend-note">One comparable scan is available. A second scan will establish change.</p>
+          <p className="mt-3 mb-0 text-xs text-ink-soft">
+            One comparable scan is available. A second scan will establish change.
+          </p>
         )}
         {data.skippedUnmeasuredCount > 0 && (
-          <p className="trend-note">
+          <p className="mt-3 mb-0 text-xs text-ink-soft">
             {data.skippedUnmeasuredCount} empty or incompatible completed scan(s) were not scored.
           </p>
         )}

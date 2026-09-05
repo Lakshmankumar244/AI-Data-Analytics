@@ -1,6 +1,6 @@
 import { matrixBand } from "../../../utils/bands";
 import { formatNumber } from "../../../utils/format";
-import "./ModuleMatrix.css";
+import { cn } from "@/lib/utils";
 
 /**
  * D10's 20-observation floor is applied per module row here (this fixture
@@ -11,34 +11,52 @@ import "./ModuleMatrix.css";
  */
 export default function ModuleMatrix({ modules, domainOrder, domainLabels, minObservations }) {
   return (
-    <div className="module-matrix-wrap">
-      <table className="module-matrix">
+    <div className="min-w-0 overflow-x-auto">
+      <table className="w-full border-separate border-spacing-0 text-xs">
         <thead>
           <tr>
-            <th className="module-matrix-rowhead">Module</th>
-            <th className="module-matrix-num">Records</th>
+            <th className="border-b border-line px-2.5 py-2.5 text-left text-[9px] font-bold tracking-wide whitespace-nowrap text-ink-muted uppercase">
+              Module
+            </th>
+            <th className="border-b border-line px-2.5 py-2.5 text-center text-[9px] font-bold tracking-wide whitespace-nowrap text-ink-muted uppercase">
+              Records
+            </th>
             {domainOrder.map((d) => (
-              <th key={d} className="module-matrix-num">{domainLabels[d]}</th>
+              <th
+                key={d}
+                className="border-b border-line px-2.5 py-2.5 text-center text-[9px] font-bold tracking-wide whitespace-nowrap text-ink-muted uppercase"
+              >
+                {domainLabels[d]}
+              </th>
             ))}
-            <th className="module-matrix-num">Overall</th>
+            <th className="border-b border-line px-2.5 py-2.5 text-center text-[9px] font-bold tracking-wide whitespace-nowrap text-ink-muted uppercase">
+              Overall
+            </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="[&>tr:last-child>th]:border-b-0 [&>tr:last-child>td]:border-b-0">
           {modules.map((m) => {
             const recordCount = m.recordCount ?? 0;
             const belowFloor = recordCount < minObservations;
 
             return (
-              <tr key={m.apiName}>
-                <th scope="row" className="module-matrix-rowhead">{m.label}</th>
-                <td className="module-matrix-num mono">{formatNumber(recordCount)}</td>
+              <tr key={m.apiName} className="hover:bg-surface-sunken">
+                <th
+                  scope="row"
+                  className="border-b border-line px-2.5 py-2.5 text-left font-semibold whitespace-nowrap text-ink"
+                >
+                  {m.label}
+                </th>
+                <td className="mono border-b border-line px-2.5 py-2.5 text-center whitespace-nowrap text-ink-soft">
+                  {formatNumber(recordCount)}
+                </td>
                 {domainOrder.map((d) => {
                   const score = belowFloor ? null : m.domains[d];
                   const band = matrixBand(score);
                   return (
                     <td
                       key={d}
-                      className="module-matrix-cell"
+                      className="border-b border-line px-2.5 py-2.5 text-center font-semibold whitespace-nowrap"
                       style={{ background: band.soft, color: band.color }}
                       title={
                         belowFloor
@@ -53,7 +71,10 @@ export default function ModuleMatrix({ modules, domainOrder, domainLabels, minOb
                   );
                 })}
                 <td
-                  className="module-matrix-cell module-matrix-overall"
+                  className={cn(
+                    "border-b border-line px-2.5 py-2.5 text-center font-bold whitespace-nowrap",
+                    belowFloor && "text-ink-soft"
+                  )}
                   style={
                     belowFloor
                       ? undefined

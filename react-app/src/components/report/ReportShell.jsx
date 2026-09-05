@@ -8,7 +8,6 @@ import TrendTab from "./trend/TrendTab";
 import RecordsTab from "./records/RecordsTab";
 import FixTab from "./fix/FixTab";
 import UsersTab from "./users/UsersTab";
-import "./ReportShell.css";
 
 const TAB_COMPONENTS = {
   overview: OverviewTab,
@@ -24,12 +23,12 @@ export default function ReportShell() {
   const ActiveTab = TAB_COMPONENTS[tab];
 
   return (
-    <div className="report-shell">
+    <div className="flex min-h-full min-w-0 flex-col gap-0 bg-paper">
       <StickyHeaderStack>
         <FilterBar />
       </StickyHeaderStack>
-      <ContentContainer className="report-shell-body">
-        <div className="report-shell-panel" data-export-root>
+      <ContentContainer className="min-w-0 flex-1">
+        <div className="report-shell-panel min-w-0" data-export-root>
           {ActiveTab ? <ActiveTab /> : <ComingSoonPanel tabLabel="Users" />}
         </div>
       </ContentContainer>

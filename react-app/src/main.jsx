@@ -3,8 +3,6 @@ import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import { ThemeProvider } from "./theme/ThemeProvider.jsx";
 import "./styles/global.css";
-import "./components/shared/primitives.css";
-import "./components/layout/layout.css";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(

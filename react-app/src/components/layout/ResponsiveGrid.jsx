@@ -17,7 +17,10 @@ export function ResponsiveGrid({
 }) {
   return (
     <Tag
-      className={cn("responsive-grid", className)}
+      className={cn(
+        "grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(var(--responsive-grid-min,240px),100%),1fr))] gap-[var(--responsive-grid-gap,var(--sp-4))]",
+        className
+      )}
       style={{
         "--responsive-grid-min": min,
         ...(gap ? { "--responsive-grid-gap": gap } : null),

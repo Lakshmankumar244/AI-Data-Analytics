@@ -11,7 +11,11 @@ import { cn } from "@/lib/utils";
 export function ContentContainer({ as: Tag = "div", flush = false, className, children, ...props }) {
   return (
     <Tag
-      className={cn("content-container", flush && "content-container-flush", className)}
+      className={cn(
+        "mx-auto min-w-0 w-full max-w-[var(--app-content-max)] px-[var(--app-gutter)]",
+        flush && "px-0",
+        className
+      )}
       {...props}
     >
       {children}

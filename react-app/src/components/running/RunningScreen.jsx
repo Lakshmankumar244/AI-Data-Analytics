@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppState, useAppDispatch } from "../../state/AppContext";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
 import useScanAnalytics from "../../hooks/useScanAnalytics";
-import { ContentContainer, PageHeader, ResponsiveGrid } from "../layout";
+import { cn } from "@/lib/utils";
+import { ContentContainer } from "../layout";
+import { Button } from "@/components/ui/button";
 import ModuleProgressList from "./ModuleProgressList";
-import "./RunningScreen.css";
 
 const STATUS_MESSAGE = {
   CREATED: "Preparing the scan securely.",
@@ -40,6 +41,15 @@ function moduleExtractedCount(module) {
     asCount(module?.recordsProcessed),
     asCount(module?.expectedRecordCount),
     fromJobs
+  );
+}
+
+function LiveStat({ label, children }) {
+  return (
+    <div className="min-w-0">
+      <p className="mono text-2xl font-semibold tracking-tight text-ink">{children}</p>
+      <p className="mt-1 text-xs text-ink-muted">{label}</p>
+    </div>
   );
 }
 
@@ -214,6 +224,11 @@ export default function RunningScreen() {
   );
   const emptyResults =
     Boolean(results?.modules?.length) && totalSourceRecords === 0;
+  const isLive =
+    !allDone && automationState !== "stopped" && automationState !== "completed";
+  const overallPercent = plannedModuleCount
+    ? Math.round((completedModuleCount / plannedModuleCount) * 100)
+    : 0;
 
   useEffect(() => {
     if (results && !emptyResults) {
@@ -233,93 +248,135 @@ export default function RunningScreen() {
       .filter(Boolean)
       .join(", ");
     return (
-      <ContentContainer className="running-screen">
-        <PageHeader
-          eyebrow="Scan complete"
-          title="No records matched this scan"
-          description={`Zoho returned no ${moduleNames || "CRM"} records for the selected date range and activity clock. Nothing failed and no records were changed.`}
-        />
-
-        <section className="panel running-empty" aria-labelledby="empty-scan-title">
-          <h2 id="empty-scan-title">Try a broader scope</h2>
-          <p>
+      <ContentContainer className="flex min-h-full flex-col justify-center py-12 sm:py-16">
+        <div className="max-w-[36rem]" aria-labelledby="empty-scan-title">
+          <p className="eyebrow">Scan complete</p>
+          <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+            No records matched this scan
+          </h1>
+          <p className="mt-4 max-w-[34rem] text-sm leading-relaxed text-ink-soft">
+            {`Zoho returned no ${moduleNames || "CRM"} records for the selected date range and activity clock. Nothing failed and no records were changed.`}
+          </p>
+          <h2
+            id="empty-scan-title"
+            className="mt-8 font-heading text-lg font-semibold tracking-tight text-ink"
+          >
+            Try a broader scope
+          </h2>
+          <p className="mt-1.5 max-w-[34rem] text-sm leading-relaxed text-ink-soft">
             Expand the date range or switch between Created time and Modified
             time, then run the scan again.
           </p>
-          <button
+          <Button
             type="button"
-            className="btn btn-primary"
+            size="lg"
+            className="mt-8 min-w-[12rem]"
             onClick={() => dispatch({ type: "reset" })}
           >
             Change scan filters
-          </button>
-        </section>
+          </Button>
+        </div>
       </ContentContainer>
     );
   }
 
   return (
-    <ContentContainer className="running-screen">
-      <PageHeader
-        eyebrow={allDone ? "Wrapping up" : "Scanning"}
-        title={allDone ? "Putting your report together\u2026" : "Reading your records\u2026"}
-        description="Read-only the whole way through. Nothing in your CRM is being changed."
-      >
-        <div className="running-refresh">
-          <div className="running-status-copy">
-            <span className="eyebrow">Reading backend status</span>
-            <p>{friendlyStatusMessage}</p>
-          </div>
-          <button
+    <ContentContainer className="flex min-h-full min-w-0 flex-col pt-8 pb-10 sm:pt-10">
+      <div className="flex min-w-0 flex-col gap-8 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
+        <div className="min-w-0 max-w-[40rem]">
+          <p className="eyebrow flex items-center gap-2">
+            {isLive && (
+              <span
+                className="size-1.5 shrink-0 rounded-full bg-brand motion-safe:animate-pulse"
+                aria-hidden="true"
+              />
+            )}
+            {allDone ? "Wrapping up" : "Scanning"}
+          </p>
+          <h1 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+            {allDone ? "Putting your report together\u2026" : "Reading your records\u2026"}
+          </h1>
+          <p className="mt-2 max-w-[42ch] text-sm leading-relaxed text-ink-soft">
+            Read-only the whole way through. Nothing in your CRM is being changed.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Button
             type="button"
-            className="btn btn-secondary"
+            variant="outline"
+            size="lg"
             disabled={loading}
             onClick={refresh}
           >
             {loading ? "Refreshing…" : "Refresh status"}
-          </button>
+          </Button>
           {!allDone && (
-            <button
+            <Button
               type="button"
-              className="btn btn-primary"
+              size="lg"
               disabled={loading || automationState !== "stopped"}
               onClick={advance}
             >
               {automationState === "stopped"
                 ? "Continue scan"
                 : "Automatic scan active"}
-            </button>
+            </Button>
           )}
         </div>
-        <p className={`running-operation running-operation-${automationState}`} role="status">
-          {visibleAutomationMessage}
-        </p>
-        {error && <p className="running-error" role="alert">{error}</p>}
-      </PageHeader>
+      </div>
 
-      <div className="panel">
-        <ResponsiveGrid min="150px" className="running-stats" aria-label="Live scan progress">
-          <div>
-            <strong className="mono">{recordsExtracted.toLocaleString("en-IN")}</strong>
-            <span>Records extracted</span>
-          </div>
-          <div>
-            <strong className="mono">
-              {completedModuleCount}/{plannedModuleCount}
-            </strong>
-            <span>Modules done</span>
-          </div>
-          <div>
-            <strong className="mono">{liveUsage.credits.toLocaleString("en-IN")}</strong>
-            <span>API credits used</span>
-          </div>
-          <div>
-            <strong className="mono">
-              {liveUsage.throttleRetries.toLocaleString("en-IN")}
-            </strong>
-            <span>Throttle retries</span>
-          </div>
-        </ResponsiveGrid>
+      <p
+        className={cn(
+          "mt-4 text-[13px]",
+          automationState === "stopped" && "text-risk",
+          automationState === "completed" && "text-strong",
+          automationState !== "stopped" &&
+            automationState !== "completed" &&
+            "text-ink-soft"
+        )}
+        role="status"
+      >
+        {visibleAutomationMessage}
+      </p>
+      <p className="mt-1 text-[13px] text-ink-soft">{friendlyStatusMessage}</p>
+      {error && (
+        <p className="mt-2 text-[13px] text-risk" role="alert">
+          {error}
+        </p>
+      )}
+
+      <div
+        className="mt-10 grid grid-cols-2 gap-x-6 gap-y-5 border-y border-line py-6 sm:grid-cols-4"
+        aria-label="Live scan progress"
+      >
+        <LiveStat label="Records extracted">
+          {recordsExtracted.toLocaleString("en-IN")}
+        </LiveStat>
+        <LiveStat label="Modules done">
+          {completedModuleCount}/{plannedModuleCount}
+        </LiveStat>
+        <LiveStat label="API credits used">
+          {liveUsage.credits.toLocaleString("en-IN")}
+        </LiveStat>
+        <LiveStat label="Throttle retries">
+          {liveUsage.throttleRetries.toLocaleString("en-IN")}
+        </LiveStat>
+      </div>
+
+      <div className="mt-10 min-w-0">
+        <div className="mb-6 flex items-baseline justify-between gap-4">
+          <p className="eyebrow">Modules</p>
+          <p className="mono text-xs text-ink-muted">{overallPercent}%</p>
+        </div>
+        <div className="mb-8 h-0.5 overflow-hidden bg-surface-sunken">
+          <div
+            className={cn(
+              "h-full bg-brand transition-[width] duration-300 ease-out",
+              allDone && "bg-strong"
+            )}
+            style={{ width: `${overallPercent}%` }}
+          />
+        </div>
         <ModuleProgressList
           modules={scopedModules}
           progress={progress}

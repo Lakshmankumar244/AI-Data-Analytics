@@ -84,12 +84,12 @@ function AppShell() {
         {/* The two transient states get the same content column as every
             screen so they do not sit flush against the rail. */}
         {state.phase === "boot" && (
-          <ContentContainer className="app-transient-state">
+          <ContentContainer className="flex min-h-0 w-full flex-1 flex-col py-[var(--sp-6)]">
             <LoadingState label="Restoring your account" />
           </ContentContainer>
         )}
         {state.phase === "error" && (
-          <ContentContainer className="app-transient-state">
+          <ContentContainer className="py-[var(--sp-6)]">
             <ErrorState
               message={state.errorMessage}
               onRetry={() => dispatch({ type: "reset" })}
