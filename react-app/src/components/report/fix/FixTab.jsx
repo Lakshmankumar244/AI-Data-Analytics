@@ -6,9 +6,21 @@ import LoadingState from "../../shared/LoadingState";
 import { cn } from "@/lib/utils";
 
 const PRIORITY_TONE = {
-  high: { color: "var(--risk)", label: "High" },
-  medium: { color: "var(--attention)", label: "Medium" },
-  low: { color: "var(--muted)", label: "Low" },
+  high: {
+    color: "var(--risk)",
+    background: "var(--risk-soft)",
+    label: "High",
+  },
+  medium: {
+    color: "var(--attention)",
+    background: "var(--attention-soft)",
+    label: "Medium",
+  },
+  low: {
+    color: "var(--muted)",
+    background: "var(--surface-sunken)",
+    label: "Low",
+  },
 };
 
 function priorityMeta(priority) {
@@ -16,63 +28,79 @@ function priorityMeta(priority) {
   return PRIORITY_TONE[key] || PRIORITY_TONE.low;
 }
 
-function PriorityWord({ priority }) {
+function PriorityBadge({ priority }) {
   const tone = priorityMeta(priority);
   return (
-    <span className="inline-flex min-w-0 items-center gap-2">
-      <span
-        className="size-1.5 shrink-0 rounded-full"
-        style={{ background: tone.color }}
-        aria-hidden="true"
-      />
-      <span
-        className="text-[13px] font-semibold tracking-tight"
-        style={{ color: tone.color }}
-      >
-        {tone.label}
-      </span>
+    <span
+      className="inline-flex shrink-0 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
+      style={{ background: tone.background, color: tone.color }}
+    >
+      {tone.label}
     </span>
   );
 }
 
-function ActionFacts({ action }) {
+function ActionMeta({ action }) {
   const facts = [
     {
-      label: "Records",
-      value: formatNumber(action.recordCount),
-      mono: true,
+      key: "records",
+      node: (
+        <>
+          <strong className="mono font-semibold tracking-tight text-ink">
+            {formatNumber(action.recordCount)}
+          </strong>{" "}
+          record{action.recordCount === 1 ? "" : "s"}
+        </>
+      ),
     },
     action.fieldApiName
-      ? { label: "Field", value: action.fieldApiName, mono: true }
+      ? {
+          key: "field",
+          node: (
+            <>
+              Field{" "}
+              <span className="mono text-ink">{action.fieldApiName}</span>
+            </>
+          ),
+        }
       : null,
     action.modules?.length
-      ? { label: "In", value: action.modules.join(", ") }
+      ? {
+          key: "module",
+          node: action.modules.join(", "),
+        }
       : null,
     typeof action.coverageRate === "number"
       ? {
-          label: "Coverage",
-          value: `${Math.round(action.coverageRate * 100)}% of module`,
-          mono: true,
+          key: "coverage",
+          node: (
+            <>
+              Coverage{" "}
+              <span className="mono text-ink">
+                {Math.round(action.coverageRate * 100)}%
+              </span>{" "}
+              of module
+            </>
+          ),
         }
       : null,
   ].filter(Boolean);
 
+  if (facts.length === 0) return null;
+
   return (
-    <dl className="mt-3 m-0 flex min-w-0 flex-wrap gap-x-6 gap-y-2">
-      {facts.map((fact) => (
-        <div key={fact.label} className="min-w-0">
-          <dt className="eyebrow">{fact.label}</dt>
-          <dd
-            className={cn(
-              "mt-0.5 mb-0 text-[13px] leading-snug text-ink",
-              fact.mono && "mono font-semibold tracking-tight"
-            )}
-          >
-            {fact.value}
-          </dd>
-        </div>
+    <p className="mt-1.5 mb-0 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px] leading-snug text-ink-muted">
+      {facts.map((fact, index) => (
+        <span key={fact.key} className="inline-flex min-w-0 items-baseline gap-x-3">
+          {index > 0 && (
+            <span className="text-line-strong" aria-hidden="true">
+              ·
+            </span>
+          )}
+          <span className="min-w-0 [overflow-wrap:anywhere]">{fact.node}</span>
+        </span>
       ))}
-    </dl>
+    </p>
   );
 }
 
@@ -82,12 +110,12 @@ function ActionRow({ action, checked, onToggle }) {
   return (
     <li
       className={cn(
-        "flex gap-3 border-b border-line py-3",
+        "flex gap-3 border-b border-line py-2.5 last:border-b-0",
         checked && "bg-surface-sunken/70"
       )}
       style={{ boxShadow: `inset 3px 0 0 ${tone.color}` }}
     >
-      <label className="mt-1.5 shrink-0 pl-3 @min-[820px]:pl-3.5">
+      <label className="mt-0.5 shrink-0 pl-4 @min-[640px]:pl-5">
         <input
           type="checkbox"
           checked={checked}
@@ -96,19 +124,19 @@ function ActionRow({ action, checked, onToggle }) {
           aria-label={`Select ${action.title}`}
         />
       </label>
-      <div className="min-w-0 flex-1 pr-1">
-        <div className="flex items-start justify-between gap-3 @max-[760px]:flex-col @max-[760px]:items-start">
+      <div className="min-w-0 flex-1 py-0.5 pr-4 @min-[640px]:pr-5">
+        <div className="flex items-start justify-between gap-3">
           <h3 className="m-0 font-heading text-[15px] leading-snug font-semibold tracking-tight text-ink">
             {action.title}
           </h3>
-          <span className="shrink-0">
-            <PriorityWord priority={action.priority} />
-          </span>
+          <PriorityBadge priority={action.priority} />
         </div>
-        <p className="mt-1.5 mb-0 max-w-[72ch] text-[14px] leading-relaxed text-ink-soft">
-          {action.description}
-        </p>
-        <ActionFacts action={action} />
+        {action.description && (
+          <p className="mt-1 mb-0 max-w-[72ch] text-[13px] leading-snug text-ink-soft">
+            {action.description}
+          </p>
+        )}
+        <ActionMeta action={action} />
       </div>
     </li>
   );
@@ -117,11 +145,11 @@ function ActionRow({ action, checked, onToggle }) {
 function FixEmpty({ title, children, role }) {
   return (
     <div className="flex min-w-0 flex-col py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
-      <section className="min-w-0" role={role}>
+      <section className="min-w-0 rounded-md border border-line bg-surface p-5 @min-[640px]:p-6">
         <h2 className="font-heading text-xl font-semibold tracking-tight text-ink">
           {title}
         </h2>
-        <p className="mt-2 max-w-[46ch] text-sm leading-relaxed text-ink-soft">
+        <p className="mt-2 mb-0 max-w-[46ch] text-sm leading-relaxed text-ink-soft" role={role}>
           {children}
         </p>
       </section>
@@ -185,20 +213,20 @@ export default function FixTab() {
   );
 
   return (
-    <div className="flex min-w-0 flex-col py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
-      <section className="min-w-0">
-        <header className="mb-5">
+    <div className="flex min-w-0 flex-col gap-3 py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
+      <section className="flex min-w-0 flex-col overflow-hidden rounded-md border border-line bg-surface">
+        <header className="border-b border-line px-4 py-4 @min-[640px]:px-5">
           <h2 className="font-heading text-xl font-semibold tracking-tight text-ink">
             Remediation plan
           </h2>
-          <p className="mt-1.5 text-sm text-ink-muted">
+          <p className="mt-1 mb-0 text-sm text-ink-muted">
             {formatNumber(plan.actionCount)} recommendation
             {plan.actionCount === 1 ? "" : "s"}
           </p>
         </header>
 
         {plan.actions.length === 0 ? (
-          <p className="max-w-[46ch] text-sm leading-relaxed text-ink-soft">
+          <p className="m-0 max-w-[46ch] px-4 py-6 text-sm leading-relaxed text-ink-soft @min-[640px]:px-5">
             No completeness or validity actions were found.
           </p>
         ) : (
@@ -215,20 +243,29 @@ export default function FixTab() {
         )}
 
         {plan.omittedActionCount > 0 && (
-          <p className="mt-4 mb-0 text-[13px] leading-relaxed text-ink-muted">
+          <p className="m-0 border-t border-line px-4 py-3 text-[13px] leading-relaxed text-ink-muted @min-[640px]:px-5">
             Showing the 30 highest-priority actions. {formatNumber(plan.omittedActionCount)} lower-priority actions are omitted.
           </p>
         )}
       </section>
 
       {plan.actions.length > 0 && (
-        <div className="sticky bottom-0 z-10 mt-2 flex items-center justify-between gap-4 border-t border-line bg-paper/95 py-3 backdrop-blur-md @max-[760px]:flex-col @max-[760px]:items-start">
-          <span className="text-[13px] font-semibold text-ink-soft">
-            {selected.size} action{selected.size === 1 ? "" : "s"} selected - {formatNumber(selectedRecords)} affected references
-          </span>
-          <span className="text-[12px] text-ink-muted">
+        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-x-4 gap-y-1 rounded-md border border-line bg-surface px-4 py-3 @max-[760px]:flex-col @max-[760px]:items-start @min-[640px]:px-5">
+          <p className="m-0 flex min-w-0 flex-wrap items-baseline gap-x-2.5 text-[13px] font-semibold text-ink">
+            <span>
+              {selected.size} action{selected.size === 1 ? "" : "s"} selected
+            </span>
+            <span className="font-normal text-line-strong" aria-hidden="true">
+              |
+            </span>
+            <span>
+              {formatNumber(selectedRecords)} record
+              {selectedRecords === 1 ? "" : "s"}
+            </span>
+          </p>
+          <p className="m-0 text-[12px] text-ink-muted">
             Records may overlap between actions.
-          </span>
+          </p>
         </div>
       )}
     </div>
