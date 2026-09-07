@@ -24,16 +24,15 @@ export default function OverviewCreatedPeriod({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
-      <header className="mb-3 shrink-0">
-        <p className="eyebrow">Volume in this period</p>
-        <h2 className="mt-1 font-heading text-xl font-semibold tracking-tight text-ink">
-          Records by module
+      <header className="mb-4 shrink-0 border-b border-line pb-3">
+        <h2 className="font-heading text-xl font-semibold tracking-tight text-ink">
+          Created in period
         </h2>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
         {hasVolume ? (
           <div
-            className="flex h-full min-h-[148px] items-stretch gap-2 overflow-x-auto pt-1"
+            className="flex h-full min-h-[148px] items-stretch gap-2 overflow-x-auto bg-surface-sunken px-3 py-3"
             role="img"
             aria-label="Records created in period by module"
           >

@@ -5,6 +5,10 @@ import { cn } from "@/lib/utils";
   the tab bar, and each screen body - comes from an instance of this, which is
   what keeps them aligned without anyone calculating a centring offset.
 
+  It is also an unnamed `@container`, so `@min-*` / `@max-*` utilities in
+  screens resolve against the content column (not the viewport, which still
+  includes the rail).
+
   `flush` drops the gutter for callers that are already inside a padded box but
   still want the max-width and centring.
 */
@@ -12,7 +16,7 @@ export function ContentContainer({ as: Tag = "div", flush = false, className, ch
   return (
     <Tag
       className={cn(
-        "mx-auto min-w-0 w-full max-w-[var(--app-content-max)] px-[var(--app-gutter)]",
+        "@container mx-auto min-w-0 w-full max-w-[var(--app-content-max)] px-[var(--app-gutter)]",
         flush && "px-0",
         className
       )}

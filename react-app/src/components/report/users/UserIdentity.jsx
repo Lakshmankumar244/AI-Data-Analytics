@@ -17,7 +17,7 @@ export default function UserIdentity({ name, modules = [] }) {
     <div className="flex min-w-0 items-start gap-3">
       <span
         className={cn(
-          "grid size-9 shrink-0 place-items-center rounded-full font-heading text-xs font-semibold tracking-wide",
+          "grid size-9 shrink-0 place-items-center rounded-full font-heading text-[11px] font-semibold tracking-wide",
           unassigned
             ? "bg-surface-sunken text-ink-muted"
             : "bg-brand-soft text-brand-strong"
@@ -27,15 +27,14 @@ export default function UserIdentity({ name, modules = [] }) {
         {initials(name)}
       </span>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <strong className="text-sm leading-snug font-semibold tracking-tight text-ink [overflow-wrap:anywhere]">
+        <strong className="font-heading text-[15px] leading-snug font-semibold tracking-tight text-ink [overflow-wrap:anywhere]">
           {name}
         </strong>
-        <p className="m-0 text-xs leading-snug text-ink-muted [overflow-wrap:anywhere]">
-          {modules.length ? modules.join(", ") : "No modules in this view"}
-        </p>
-        <p className="m-0 text-xs leading-snug text-ink-muted italic">
-          Team not in this scan
-        </p>
+        {modules.length > 0 && (
+          <p className="m-0 text-[12px] leading-snug text-ink-muted [overflow-wrap:anywhere]">
+            {modules.join(", ")}
+          </p>
+        )}
       </div>
     </div>
   );

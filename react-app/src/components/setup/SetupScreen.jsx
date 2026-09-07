@@ -3,7 +3,6 @@ import { useAppState, useActions, useAppDispatch } from "../../state/AppContext"
 import * as api from "../../data/client";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
 import { formatReportPeriod } from "../../utils/format";
-import { cn } from "@/lib/utils";
 import { ContentContainer } from "../layout";
 import { Button } from "@/components/ui/button";
 import AccessibleModulesList from "./AccessibleModulesList";
@@ -14,37 +13,33 @@ import { DateRangeField, DateRangePresets, RANGE_LABELS } from "./DateRangePicke
 import CostEstimate from "./CostEstimate";
 import LoadingState from "../shared/LoadingState";
 
-function SetupStep({ step, title, lede, last = false, children }) {
+function SetupSection({ step, title, children }) {
   const headingId = `setup-step-${step}-title`;
   const index = String(step).padStart(2, "0");
   return (
     <section
-      className="grid min-w-0 grid-cols-[2.5rem_minmax(0,1fr)] gap-x-5 sm:grid-cols-[3rem_minmax(0,1fr)] sm:gap-x-7"
+      className="min-w-0 rounded-md border border-line bg-surface p-5 @min-[640px]:p-6"
       aria-labelledby={headingId}
     >
-      <div className="relative flex flex-col items-center" aria-hidden="true">
-        <span className="font-heading text-xl font-semibold tracking-tight text-brand sm:text-2xl">
+      <h2
+        id={headingId}
+        className="flex min-w-0 items-baseline gap-3 font-heading text-xl font-semibold tracking-tight text-ink sm:text-2xl"
+      >
+        <span className="font-heading text-brand" aria-hidden="true">
           {index}
         </span>
-        {!last && (
-          <span className="mt-3 w-px flex-1 bg-line" />
-        )}
-      </div>
-      <div className={cn("min-w-0", last ? "pb-2" : "pb-12 sm:pb-16")}>
-        <h2
-          id={headingId}
-          className="font-heading text-xl font-semibold tracking-tight text-ink sm:text-2xl"
-        >
-          {title}
-        </h2>
-        {lede && (
-          <p className="mt-1.5 max-w-[52ch] text-sm leading-relaxed text-ink-soft">
-            {lede}
-          </p>
-        )}
-        <div className="mt-6 flex min-w-0 flex-col gap-6">{children}</div>
-      </div>
+        {title}
+      </h2>
+      <div className="mt-6 min-w-0">{children}</div>
     </section>
+  );
+}
+
+function SetupColumns({ children }) {
+  return (
+    <div className="grid min-w-0 grid-cols-1 items-start gap-6 @min-[640px]:grid-cols-2 @min-[640px]:gap-x-10">
+      {children}
+    </div>
   );
 }
 
@@ -221,91 +216,76 @@ export default function SetupScreen() {
   const canStart = moduleCount > 0 && !starting;
 
   return (
-    <ContentContainer className="flex min-h-full min-w-0 flex-col pt-8 sm:pt-10">
-      <p className="max-w-[40rem] text-sm leading-relaxed text-ink-soft">
-        Three decisions, then a read-only pass over what this login can see.
-        Nothing in Zoho is created, updated, or deleted.
-      </p>
-
-      <div className="mt-10 min-w-0 flex-1 sm:mt-12">
-        <SetupStep
-          step={1}
-          title="Who, and how deep"
-          lede="The connected org is fixed for this run. Depth caps how many records we read in each module."
-        >
-          <div className="flex items-start gap-4">
-            <div
-              className="grid size-11 shrink-0 place-items-center bg-brand-soft font-heading text-sm font-semibold tracking-wide text-brand-strong"
-              aria-hidden="true"
-            >
-              {orgInitials(organizationLabel)}
-            </div>
-            <div className="min-w-0">
-              <p className="font-heading text-lg font-semibold tracking-tight text-ink">
-                {organizationLabel}
-              </p>
-              {connectedName && (
-                <p className="mt-0.5 text-[13px] text-ink-soft">
-                  Connected as {connectedName}. Visibility follows this login,
-                  not the whole org.
-                </p>
-              )}
-              <Button
-                type="button"
-                variant="link"
-                className="mt-1 h-auto px-0 text-[13px]"
-                onClick={handleConnect}
-                disabled={connecting}
+    <ContentContainer className="flex min-h-full min-w-0 flex-col pt-6 @min-[640px]:pt-8">
+      <div className="mt-2 flex min-w-0 flex-1 flex-col gap-4 @min-[640px]:gap-5">
+        <SetupSection step={1} title="Org and depth">
+          <SetupColumns>
+            <div className="flex min-w-0 items-start gap-4">
+              <div
+                className="grid size-11 shrink-0 place-items-center bg-brand-soft font-heading text-sm font-semibold tracking-wide text-brand-strong"
+                aria-hidden="true"
               >
-                Connect another organization
-              </Button>
+                {orgInitials(organizationLabel)}
+              </div>
+              <div className="min-w-0">
+                <p className="font-heading text-lg font-semibold tracking-tight text-ink">
+                  {organizationLabel}
+                </p>
+                {connectedName && (
+                  <p className="mt-0.5 text-[13px] text-ink-soft">
+                    Connected as {connectedName}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  variant="link"
+                  className="mt-1 h-auto px-0 text-[13px]"
+                  onClick={handleConnect}
+                  disabled={connecting}
+                >
+                  Connect another organization
+                </Button>
+              </div>
             </div>
-          </div>
-          <DepthSelector
-            value={scanConfig.depth}
-            onChange={(depth) => setScanConfig({ depth })}
-          />
-        </SetupStep>
-
-        <SetupStep
-          step={2}
-          title="Which records count"
-          lede="Period is the window. Clock is whether we use created time or last modified time."
-        >
-          <DateRangePresets
-            value={scanConfig.range}
-            onChange={(range) => setScanConfig({ range })}
-          />
-          {scanConfig.range?.id === "custom" && (
-            <DateRangeField
-              value={scanConfig.range}
-              onChange={(range) => setScanConfig({ range })}
+            <DepthSelector
+              value={scanConfig.depth}
+              onChange={(depth) => setScanConfig({ depth })}
             />
-          )}
-          <ClockToggle
-            value={scanConfig.clock}
-            onChange={(clock) => setScanConfig({ clock })}
-          />
-        </SetupStep>
+          </SetupColumns>
+        </SetupSection>
 
-        <SetupStep
-          step={3}
-          title="What to include"
-          lede="Only modules visible under this Zoho login are listed. A small count usually means profile visibility, not an empty module."
-          last
-        >
+        <SetupSection step={2} title="Period">
+          <SetupColumns>
+            <div className="flex min-w-0 flex-col gap-6">
+              <DateRangePresets
+                value={scanConfig.range}
+                onChange={(range) => setScanConfig({ range })}
+              />
+              <DateRangeField
+                value={scanConfig.range}
+                onChange={(range) => setScanConfig({ range })}
+              />
+            </div>
+            <ClockToggle
+              value={scanConfig.clock}
+              onChange={(clock) => setScanConfig({ clock })}
+            />
+          </SetupColumns>
+        </SetupSection>
+
+        <SetupSection step={3} title="Modules">
           <AccessibleModulesList
             modules={connection.accessibleModules}
             selected={scanConfig.modules}
             onToggle={toggleModule}
             onSelectAll={selectAllModules}
           />
-        </SetupStep>
+        </SetupSection>
       </div>
 
       <div className="sticky bottom-0 z-20 -mx-[var(--app-gutter)] mt-8 border-t border-line bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-[var(--app-gutter)] py-4 backdrop-blur-md">
-        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <dl className="m-0 grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+        <div className="flex min-w-0 flex-col gap-4 @min-[640px]:flex-row @min-[640px]:items-end @min-[640px]:justify-between">
+          <dl className="m-0 grid min-w-0 flex-1 grid-cols-2 gap-x-6 gap-y-3 @min-[640px]:grid-cols-4">
             <DockStat label="Modules">
               {moduleCount} {moduleCount === 1 ? "module" : "modules"}
             </DockStat>

@@ -3,6 +3,7 @@ import { DOMAIN_LABELS } from "../../../utils/bands";
 import LoadingState from "../../shared/LoadingState";
 import FieldQualityTable from "./FieldQualityTable";
 import ModuleMatrix from "./ModuleMatrix";
+import { formatNumber } from "../../../utils/format";
 
 const DOMAIN_ORDER = [
   "completeness",
@@ -31,59 +32,42 @@ export default function ModulesTab() {
     visibleModules.some((module) => typeof module.domains[domain] === "number")
   );
 
+  if (!visibleModules.length) {
+    return (
+      <div className="flex min-w-0 flex-col py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
+        <h2 className="font-heading text-xl font-semibold tracking-tight text-ink">
+          Modules
+        </h2>
+        <p className="mt-2 max-w-[46ch] text-sm leading-relaxed text-ink-soft">
+          No modules match the current filters.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-w-0 flex-col gap-10 py-6 pb-12 @max-[720px]:py-4 @max-[720px]:pb-8">
-      <section className="min-w-0">
-        <header className="mb-2.5">
-          <p className="eyebrow">Modules</p>
-        </header>
-        <ModuleMatrix
-          modules={visibleModules}
-          domainOrder={measuredDomainOrder}
-          domainLabels={DOMAIN_LABELS}
-          minObservations={minObservations}
-        />
-      </section>
+    <div className="flex min-w-0 flex-col gap-5 py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
+      <ModuleMatrix
+        modules={visibleModules}
+        domainOrder={measuredDomainOrder}
+        domainLabels={DOMAIN_LABELS}
+        minObservations={minObservations}
+      />
 
       {visibleModules.map((module) => (
-        <section className="min-w-0 border-t border-line pt-8" key={module.apiName}>
-          <header className="mb-2.5 flex flex-wrap items-start justify-between gap-2.5">
-            <div>
-              <p className="eyebrow">{module.label}</p>
-              <h2 className="mt-0.5 font-heading text-base font-semibold tracking-tight text-ink">
-                Field quality
-              </h2>
-              <p className="mt-0.5 text-xs text-ink-muted">
-                {module.recordCount.toLocaleString("en-IN")} records analyzed
-              </p>
-            </div>
-            <div
-              className="flex flex-wrap gap-x-4 gap-y-1"
-              aria-label="Measured scores"
-            >
-              {DOMAIN_ORDER.filter(
-                (domain) => typeof module.domains[domain] === "number"
-              ).map((domain) => (
-                <span key={domain} className="text-[11px] text-ink-soft">
-                  {DOMAIN_LABELS[domain]}{" "}
-                  <strong className="mono ml-1 font-semibold text-ink">
-                    {module.domains[domain]}
-                  </strong>
-                </span>
-              ))}
-            </div>
+        <section
+          className="min-w-0 rounded-md border border-line bg-surface p-5 @min-[640px]:p-6"
+          key={module.apiName}
+        >
+          <header className="mb-4 border-b border-line pb-3">
+            <h2 className="font-heading text-xl font-semibold tracking-tight text-ink">
+              {module.label}
+            </h2>
+            <p className="mt-1 text-sm text-ink-muted">
+              {formatNumber(module.recordCount)} records
+            </p>
           </header>
-
           <FieldQualityTable fields={module.fields} />
-
-          <div className="mt-4">
-            <p className="eyebrow text-attention">Recommended attention</p>
-            <ul className="mt-2 mb-0 list-disc space-y-1.5 pl-[18px] text-xs text-ink-soft">
-              {module.recommendations.map((recommendation) => (
-                <li key={recommendation}>{recommendation}</li>
-              ))}
-            </ul>
-          </div>
         </section>
       ))}
     </div>

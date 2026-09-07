@@ -8,21 +8,16 @@ import { cn } from "@/lib/utils";
 export default function ScoreBar({ label, score, applicable = true, reason }) {
   if (!applicable) {
     return (
-      <div
-        className="grid min-w-0 grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)_2.5rem] items-center gap-x-3 gap-y-1 py-1.5 @max-[480px]:grid-cols-[minmax(0,1fr)_2.5rem]"
-        title={reason}
-      >
-        <span className="min-w-0 text-[13px] font-medium text-ink-muted @max-[480px]:col-span-full">
-          {label}
-        </span>
-        <div className="relative h-2.5 min-w-0 bg-surface-sunken">
-          <span className="absolute top-1/2 left-2 -translate-y-1/2 text-[11px] text-ink-muted italic">
-            Not measured
+      <div className="flex min-w-0 flex-col gap-1.5 py-2" title={reason}>
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="min-w-0 truncate text-[13px] font-medium text-ink-muted">
+            {label}
+          </span>
+          <span className="mono shrink-0 text-[13px] font-semibold text-ink-muted">
+            n/a
           </span>
         </div>
-        <span className="mono text-right text-[13px] font-semibold text-ink-muted">
-          —
-        </span>
+        <div className="h-1 bg-surface-sunken" />
       </div>
     );
   }
@@ -31,31 +26,33 @@ export default function ScoreBar({ label, score, applicable = true, reason }) {
   const needsAttention = band.id === "attention" || band.id === "risk";
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,8.5rem)_minmax(0,1fr)_2.5rem] items-center gap-x-3 gap-y-1 py-1.5 @max-[480px]:grid-cols-[minmax(0,1fr)_2.5rem]">
-      <span
-        className={cn(
-          "min-w-0 text-[13px] @max-[480px]:col-span-full",
-          needsAttention ? "font-semibold text-ink" : "font-medium text-ink-soft"
-        )}
-      >
-        {label}
-      </span>
-      <div className="relative h-2.5 min-w-0 overflow-hidden bg-surface-sunken">
+    <div className="flex min-w-0 flex-col gap-1.5 py-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <span
+          className={cn(
+            "min-w-0 truncate text-[13px]",
+            needsAttention ? "font-semibold text-ink" : "font-medium text-ink-soft"
+          )}
+        >
+          {label}
+        </span>
+        <span
+          className="mono shrink-0 text-[15px] font-semibold tracking-tight"
+          style={{ color: needsAttention ? band.color : "var(--ink)" }}
+        >
+          {score}
+        </span>
+      </div>
+      <div className="h-1 overflow-hidden bg-surface-sunken">
         <div
           className="h-full transition-[width] duration-300"
           style={{
             width: `${score}%`,
             background: band.color,
-            opacity: needsAttention ? 1 : 0.72,
+            opacity: needsAttention ? 1 : 0.85,
           }}
         />
       </div>
-      <span
-        className="mono text-right text-[15px] font-semibold tracking-tight"
-        style={{ color: needsAttention ? band.color : "var(--ink)" }}
-      >
-        {score}
-      </span>
     </div>
   );
 }

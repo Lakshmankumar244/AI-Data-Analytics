@@ -2,16 +2,16 @@ import { useMemo } from "react";
 import { useAppState } from "../../../state/AppContext";
 import { groupOwnerAnalytics } from "../../../data/ownerAnalytics";
 import UserQualityTable from "./UserQualityTable";
+import { recordsNeedingActionInsight } from "./usersModel";
 
 function UsersEmpty({ title, children }) {
   return (
-    <div className="flex min-w-0 flex-col gap-6 py-6 pb-12 @max-[560px]:gap-4 @max-[560px]:py-4 @max-[560px]:pb-8">
+    <div className="flex min-w-0 flex-col py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
       <section className="min-w-0">
-        <p className="eyebrow">Users</p>
-        <h2 className="mt-1 font-heading text-lg font-semibold tracking-tight text-ink">
+        <h2 className="font-heading text-xl font-semibold tracking-tight text-ink">
           {title}
         </h2>
-        <p className="mt-2 max-w-[46ch] text-[13px] leading-normal text-ink-soft">
+        <p className="mt-2 max-w-[46ch] text-sm leading-relaxed text-ink-soft">
           {children}
         </p>
       </section>
@@ -20,7 +20,8 @@ function UsersEmpty({ title, children }) {
 }
 
 export default function UsersTab() {
-  const { scan, filterModules, filterUsers } = useAppState();
+  const { scan, filterModules, filterUsers, scanConfig } = useAppState();
+  const minRecords = scanConfig?.rules?.minRecordsPerUser ?? 25;
   const owners = useMemo(() => {
     const grouped = groupOwnerAnalytics(scan?.moduleAnalytics ?? [], filterModules);
     if (!filterUsers.length) return grouped;
@@ -31,12 +32,15 @@ export default function UsersTab() {
     () => groupOwnerAnalytics(scan?.moduleAnalytics ?? [], []).length > 0,
     [scan]
   );
+  const insight = useMemo(
+    () => recordsNeedingActionInsight(owners, minRecords),
+    [minRecords, owners]
+  );
 
   if (!hasOwnerAnalytics) {
     return (
-      <UsersEmpty title="User analytics were not measured in this scan">
-        Owner-level aggregates will appear for scans processed after this
-        feature was deployed. Older reports remain available without them.
+      <UsersEmpty title="User analytics were not measured">
+        Run a new scan after this feature was deployed.
       </UsersEmpty>
     );
   }
@@ -44,14 +48,14 @@ export default function UsersTab() {
   if (!owners.length) {
     return (
       <UsersEmpty title="No users match the current filters">
-        Clear the Users or Modules filter to see owner-level quality again.
+        Clear the Users or Modules filter.
       </UsersEmpty>
     );
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-6 py-6 pb-12 @max-[560px]:gap-4 @max-[560px]:py-4 @max-[560px]:pb-8">
-      <UserQualityTable owners={owners} />
+    <div className="flex min-w-0 flex-col py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
+      <UserQualityTable owners={owners} minRecords={minRecords} insight={insight} />
     </div>
   );
 }

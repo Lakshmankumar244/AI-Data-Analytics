@@ -1,23 +1,13 @@
-import Band from "../../shared/Band";
-import { orgBand } from "../../../utils/bands";
+import { INSUFFICIENT_BAND } from "../../../utils/bands";
 
-const UNMEASURED = {
-  id: "na",
-  label: "Not measured",
-  color: "var(--muted)",
-  soft: "var(--surface-sunken)",
-};
-
-export default function UserStatusBadge({ score }) {
-  const band = typeof score === "number" ? orgBand(score) : UNMEASURED;
+export default function UserStatusBadge({ standing }) {
+  const band = standing ?? INSUFFICIENT_BAND;
   return (
-    <span className="inline-flex min-w-0 items-center gap-2">
-      <span
-        className="size-[7px] shrink-0 rounded-full"
-        style={{ background: band.color }}
-        aria-hidden="true"
-      />
-      <Band band={band} size="sm" />
+    <span
+      className="inline-flex max-w-full px-1.5 py-0.5 text-[12px] font-semibold tracking-tight"
+      style={{ background: band.soft, color: band.color }}
+    >
+      {band.label}
     </span>
   );
 }

@@ -49,12 +49,6 @@ function clockLabel(clock) {
   return clock || null;
 }
 
-function depthLabel(depth) {
-  const text = String(depth || "").trim();
-  if (!text) return null;
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
-}
-
 function canOpenScan(scan) {
   return scan.status === "COMPLETED" && scan.hasResults;
 }
@@ -142,22 +136,6 @@ function ScanActions({
         </Button>
       )}
     </>
-  );
-}
-
-function LatestStat({ label, children, mono = false }) {
-  return (
-    <div className="min-w-0">
-      <dt className="eyebrow">{label}</dt>
-      <dd
-        className={cn(
-          "mt-1.5 text-[15px] font-medium tracking-tight text-ink",
-          mono && "mono text-base"
-        )}
-      >
-        {children}
-      </dd>
-    </div>
   );
 }
 
@@ -275,12 +253,11 @@ export default function HomeScreen() {
     ? formatReportPeriod(latestScan.fromUtc, latestScan.toUtc)
     : null;
   const latestClock = latestScan ? clockLabel(latestScan.clock) : null;
-  const latestDepth = latestScan ? depthLabel(latestScan.depth) : null;
   const latestActionIsPrimary =
     latestScan && (canOpenScan(latestScan) || canResumeScan(latestScan));
 
   return (
-    <ContentContainer className="pb-12 pt-8 sm:pt-10">
+    <ContentContainer className="pb-10 pt-6 @min-[640px]:pt-8">
       {connection ? (
         <div className="mb-8 flex min-w-0 flex-wrap items-end justify-end gap-x-3 gap-y-2">
           {connection.availableConnections?.length > 1 && (
@@ -347,7 +324,7 @@ export default function HomeScreen() {
 
       {connection && (
         <section
-          className="mb-12 border-b border-line pb-10"
+          className="mb-10 border-b border-line pb-8"
           aria-labelledby="latest-scan-heading"
         >
           <p className="eyebrow">Latest scan</p>
@@ -381,27 +358,6 @@ export default function HomeScreen() {
                   />
                 </div>
               </div>
-              <dl className="mt-8 grid max-w-3xl grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-4">
-                <LatestStat label="Records" mono>
-                  {formatNumber(latestScan.recordCount)}
-                </LatestStat>
-                <LatestStat label="Modules">
-                  {latestScan.modules?.length
-                    ? `${latestScan.modules.length} ${
-                        latestScan.modules.length === 1 ? "module" : "modules"
-                      }`
-                    : "—"}
-                </LatestStat>
-                <LatestStat label="Depth">{latestDepth || "—"}</LatestStat>
-                <LatestStat label="Created">
-                  {readableDate(latestScan.createdAt)}
-                </LatestStat>
-              </dl>
-              {latestScan.modules?.length > 0 && (
-                <div className="mt-6 max-w-[62ch] text-[13px] leading-relaxed text-ink-muted">
-                  <ModuleSummary modules={latestScan.modules} />
-                </div>
-              )}
             </>
           ) : (
             <div className="mt-3 max-w-[42rem]">
@@ -412,9 +368,7 @@ export default function HomeScreen() {
                 No scans yet
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-                Run a scan to measure data health for {organizationName}. Completeness,
-                accuracy, and duplicates are scored from the modules this login can
-                see.
+                Run a scan to measure data health for {organizationName}.
               </p>
             </div>
           )}
@@ -424,7 +378,6 @@ export default function HomeScreen() {
       <section className="min-w-0 rounded-md border border-line bg-surface p-4 sm:p-5">
         <div className="mb-3 flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
           <div>
-            <p className="eyebrow">History</p>
             <h2 className="mt-0.5 font-heading text-lg font-semibold tracking-tight text-ink">
               Past scans
             </h2>
@@ -456,8 +409,8 @@ export default function HomeScreen() {
         {visibleScans.length === 0 ? (
           <p className="rounded-md border border-dashed border-line px-4 py-8 text-center text-[13px] text-ink-muted">
             {scanHistory.length === 0
-              ? "No scans have been created for this user yet."
-              : "No scans have been created with this Zoho account."}
+              ? "No scans yet."
+              : "No scans for this Zoho account."}
           </p>
         ) : (
           <div className="min-w-0 overflow-x-auto overscroll-x-contain">

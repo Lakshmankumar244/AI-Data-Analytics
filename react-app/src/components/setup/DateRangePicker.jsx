@@ -31,9 +31,8 @@ export function DateRangePresets({ value, onChange }) {
   const options = [...QUICK_RANGES, { id: "custom", label: "Custom" }];
   return (
     <div className="min-w-0">
-      <p className="eyebrow">Period</p>
       <div
-        className="mt-3 flex flex-wrap gap-x-5 gap-y-1"
+        className="flex flex-wrap gap-x-5 gap-y-1"
         role="radiogroup"
         aria-label="Date range presets"
       >

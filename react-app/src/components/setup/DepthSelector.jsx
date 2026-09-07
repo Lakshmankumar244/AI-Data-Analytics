@@ -1,14 +1,13 @@
 import { cn } from "@/lib/utils";
 
 const DEPTHS = [
-  { id: "quick", label: "Quick", cap: "1,000 / module", note: "Smoke test after a fix. Cheapest run." },
-  { id: "presales", label: "Presales", cap: "5,000 / module", note: "Enough to produce a real picture." },
-  { id: "deep", label: "Deep", cap: "20,000 / module", note: "Enough volume for plausibility checks." },
-  { id: "full", label: "Full", cap: "Uncapped", note: "Everything in range." },
+  { id: "quick", label: "Quick", cap: "1,000 / module" },
+  { id: "presales", label: "Presales", cap: "5,000 / module" },
+  { id: "deep", label: "Deep", cap: "20,000 / module" },
+  { id: "full", label: "Full", cap: "Uncapped" },
 ];
 
 export default function DepthSelector({ value, onChange }) {
-  const selected = DEPTHS.find((depth) => depth.id === value) ?? DEPTHS[1];
   return (
     <div className="min-w-0">
       <p className="eyebrow">Scan depth</p>
@@ -41,7 +40,6 @@ export default function DepthSelector({ value, onChange }) {
           );
         })}
       </div>
-      <p className="mt-3 text-[13px] text-ink-soft">{selected.note}</p>
     </div>
   );
 }

@@ -226,9 +226,6 @@ export default function RunningScreen() {
     Boolean(results?.modules?.length) && totalSourceRecords === 0;
   const isLive =
     !allDone && automationState !== "stopped" && automationState !== "completed";
-  const overallPercent = plannedModuleCount
-    ? Math.round((completedModuleCount / plannedModuleCount) * 100)
-    : 0;
 
   useEffect(() => {
     if (results && !emptyResults) {
@@ -250,22 +247,14 @@ export default function RunningScreen() {
     return (
       <ContentContainer className="flex min-h-full flex-col justify-center py-12 sm:py-16">
         <div className="max-w-[36rem]" aria-labelledby="empty-scan-title">
-          <p className="eyebrow">Scan complete</p>
-          <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+          <h1
+            id="empty-scan-title"
+            className="font-heading text-3xl font-semibold tracking-tight text-ink sm:text-4xl"
+          >
             No records matched this scan
           </h1>
           <p className="mt-4 max-w-[34rem] text-sm leading-relaxed text-ink-soft">
-            {`Zoho returned no ${moduleNames || "CRM"} records for the selected date range and activity clock. Nothing failed and no records were changed.`}
-          </p>
-          <h2
-            id="empty-scan-title"
-            className="mt-8 font-heading text-lg font-semibold tracking-tight text-ink"
-          >
-            Try a broader scope
-          </h2>
-          <p className="mt-1.5 max-w-[34rem] text-sm leading-relaxed text-ink-soft">
-            Expand the date range or switch between Created time and Modified
-            time, then run the scan again.
+            {`No ${moduleNames || "CRM"} records for the selected date range and clock.`}
           </p>
           <Button
             type="button"
@@ -281,10 +270,10 @@ export default function RunningScreen() {
   }
 
   return (
-    <ContentContainer className="flex min-h-full min-w-0 flex-col pt-8 pb-10 sm:pt-10">
-      <div className="flex min-w-0 flex-col gap-8 sm:flex-row sm:items-end sm:justify-between sm:gap-10">
+    <ContentContainer className="flex min-h-full min-w-0 flex-col pt-6 pb-8 @min-[640px]:pt-8">
+      <div className="flex min-w-0 flex-col gap-6 @min-[640px]:flex-row @min-[640px]:items-end @min-[640px]:justify-between @min-[640px]:gap-10">
         <div className="min-w-0 max-w-[40rem]">
-          <p className="eyebrow flex items-center gap-2">
+          <h1 className="flex items-center gap-2 font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
             {isLive && (
               <span
                 className="size-1.5 shrink-0 rounded-full bg-brand motion-safe:animate-pulse"
@@ -292,13 +281,7 @@ export default function RunningScreen() {
               />
             )}
             {allDone ? "Wrapping up" : "Scanning"}
-          </p>
-          <h1 className="mt-2 font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            {allDone ? "Putting your report together\u2026" : "Reading your records\u2026"}
           </h1>
-          <p className="mt-2 max-w-[42ch] text-sm leading-relaxed text-ink-soft">
-            Read-only the whole way through. Nothing in your CRM is being changed.
-          </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Button
@@ -336,9 +319,10 @@ export default function RunningScreen() {
         )}
         role="status"
       >
-        {visibleAutomationMessage}
+        {automationState === "stopped" || automationState === "completed"
+          ? visibleAutomationMessage
+          : friendlyStatusMessage}
       </p>
-      <p className="mt-1 text-[13px] text-ink-soft">{friendlyStatusMessage}</p>
       {error && (
         <p className="mt-2 text-[13px] text-risk" role="alert">
           {error}
@@ -346,7 +330,7 @@ export default function RunningScreen() {
       )}
 
       <div
-        className="mt-10 grid grid-cols-2 gap-x-6 gap-y-5 border-y border-line py-6 sm:grid-cols-4"
+        className="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 border-y border-line py-5 @min-[640px]:grid-cols-4"
         aria-label="Live scan progress"
       >
         <LiveStat label="Records extracted">
@@ -363,20 +347,8 @@ export default function RunningScreen() {
         </LiveStat>
       </div>
 
-      <div className="mt-10 min-w-0">
-        <div className="mb-6 flex items-baseline justify-between gap-4">
-          <p className="eyebrow">Modules</p>
-          <p className="mono text-xs text-ink-muted">{overallPercent}%</p>
-        </div>
-        <div className="mb-8 h-0.5 overflow-hidden bg-surface-sunken">
-          <div
-            className={cn(
-              "h-full bg-brand transition-[width] duration-300 ease-out",
-              allDone && "bg-strong"
-            )}
-            style={{ width: `${overallPercent}%` }}
-          />
-        </div>
+      <div className="mt-8 min-w-0">
+        <p className="eyebrow mb-4">Modules</p>
         <ModuleProgressList
           modules={scopedModules}
           progress={progress}

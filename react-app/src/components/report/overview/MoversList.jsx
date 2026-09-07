@@ -24,7 +24,7 @@ export default function MoversList({ movers }) {
         return (
           <li
             key={`${m.type}-${m.key || m.label}`}
-            className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-x-3 py-2"
+            className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-x-3 border-t border-line py-2.5 first:border-t-0 first:pt-0"
           >
             <span
               className={cn(

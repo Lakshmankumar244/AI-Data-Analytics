@@ -14,6 +14,58 @@ export function orgBand(score) {
   return ORG_BANDS.find((b) => score >= b.min) ?? ORG_BANDS[ORG_BANDS.length - 1];
 }
 
+// User coaching band (Users report). Driven by the user quality percentage
+// once the minimum-record floor is met — not the org/module verdict.
+export const USER_BANDS = [
+  {
+    min: 70,
+    id: "exemplary",
+    label: "Exemplary",
+    action: "Use as model",
+    color: "var(--strong)",
+    soft: "var(--strong-soft)",
+  },
+  {
+    min: 50,
+    id: "solid",
+    label: "Solid",
+    action: "No action",
+    color: "var(--stable)",
+    soft: "var(--stable-soft)",
+  },
+  {
+    min: 30,
+    id: "coaching",
+    label: "Needs coaching",
+    action: "Coach on the weakest domain",
+    color: "var(--attention)",
+    soft: "var(--attention-soft)",
+  },
+  {
+    min: 0,
+    id: "intervention",
+    label: "Intervention",
+    action: "Review with team lead",
+    color: "var(--risk)",
+    soft: "var(--risk-soft)",
+  },
+];
+
+export const INSUFFICIENT_BAND = {
+  id: "insufficient",
+  label: "Insufficient data",
+  action: "Below threshold",
+  color: "var(--muted)",
+  soft: "var(--surface-sunken)",
+};
+
+export function userBand(score, insufficient = false) {
+  if (insufficient || score === null || score === undefined) {
+    return INSUFFICIENT_BAND;
+  }
+  return USER_BANDS.find((b) => score >= b.min) ?? USER_BANDS[USER_BANDS.length - 1];
+}
+
 // Matrix cell band (6-tier, used on the Modules screen - Phase 3)
 export const MATRIX_BANDS = [
   { min: 97, id: "excellent", label: "Excellent", color: "var(--matrix-excellent)", soft: "var(--matrix-excellent-soft)" },

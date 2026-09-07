@@ -6,26 +6,47 @@ export default function QualityIndicator({
   score,
   size = "md",
   emphasize = false,
+  variant = "bar",
+  unavailableLabel = "n/a",
 }) {
   const measured = typeof score === "number";
   const band = measured ? orgBand(score) : null;
   const large = size === "lg";
+  const needsAttention = band && (band.id === "attention" || band.id === "risk");
+
+  if (variant === "pill") {
+    return (
+      <span
+        className={cn(
+          "inline-flex min-w-[2.25rem] items-center justify-center px-1.5 py-0.5 font-semibold tracking-tight",
+          measured ? "mono text-[13px]" : "text-[12px] text-ink-muted"
+        )}
+        style={
+          measured
+            ? { background: band.soft, color: needsAttention || emphasize ? band.color : "var(--ink)" }
+            : { background: "var(--surface-sunken)" }
+        }
+      >
+        {measured ? score : unavailableLabel}
+      </span>
+    );
+  }
 
   return (
     <div
       className={cn(
-        "grid min-w-0 grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-x-2 gap-y-1.5",
-        large && "grid-cols-[minmax(0,1fr)_2.6rem]"
+        "grid min-w-0 grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-x-2.5 gap-y-1",
+        large && "grid-cols-[minmax(0,1fr)_2.75rem]"
       )}
     >
       {label && (
-        <span className="col-span-full text-[10px] font-semibold tracking-wide text-ink-muted uppercase">
+        <span className="eyebrow col-span-full">
           {label}
         </span>
       )}
       <div
         className={cn(
-          "min-w-0 overflow-hidden rounded-full bg-surface-sunken",
+          "min-w-0 overflow-hidden bg-surface-sunken",
           large ? "h-2" : "h-1.5"
         )}
         role="img"
@@ -33,20 +54,28 @@ export default function QualityIndicator({
       >
         {measured ? (
           <span
-            className="block h-full rounded-full"
-            style={{ width: `${score}%`, background: band.color }}
+            className="block h-full"
+            style={{
+              width: `${score}%`,
+              background: band.color,
+              opacity: needsAttention || emphasize ? 1 : 0.72,
+            }}
           />
         ) : null}
       </div>
       <span
         className={cn(
-          "mono text-right font-semibold",
-          large
-            ? "text-base tracking-tight text-ink"
-            : emphasize
-              ? "text-xs text-ink"
-              : "text-xs text-ink-soft"
+          "mono text-right font-semibold tracking-tight",
+          large ? "text-[17px]" : "text-[13px]",
+          !measured && "text-ink-muted"
         )}
+        style={
+          measured && (needsAttention || emphasize)
+            ? { color: band.color }
+            : measured
+              ? { color: "var(--ink)" }
+              : undefined
+        }
       >
         {measured ? score : "—"}
       </span>

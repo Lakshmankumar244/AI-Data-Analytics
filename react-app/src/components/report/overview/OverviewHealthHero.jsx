@@ -1,20 +1,13 @@
 import ScoreGauge from "../../shared/ScoreGauge";
-import { DOMAIN_LABELS } from "../../../utils/bands";
 import { formatNumber } from "../../../utils/format";
+import { orgBand } from "../../../utils/bands";
 
-function WhyFact({ label, children, swatch }) {
+function HeroFact({ label, children }) {
   return (
     <div className="min-w-0">
       <dt className="eyebrow">{label}</dt>
-      <dd className="mt-1 flex min-w-0 items-baseline gap-2 text-[13px] font-medium tracking-tight text-ink">
-        {swatch && (
-          <span
-            className="inline-block size-1.5 shrink-0 rounded-full"
-            style={{ background: swatch }}
-            aria-hidden="true"
-          />
-        )}
-        <span className="min-w-0">{children}</span>
+      <dd className="mono mt-1 text-[15px] font-semibold tracking-tight text-ink">
+        {children}
       </dd>
     </div>
   );
@@ -28,23 +21,17 @@ export default function OverviewHealthHero({
   unmeasuredDomains,
   explanation,
   reuseNotice,
-  weakestDomain,
-  strongestDomain,
-  dominantState,
+  recordsInScope,
+  moduleCount,
+  duplicateCount,
 }) {
-  const weakestLabel = weakestDomain
-    ? DOMAIN_LABELS[weakestDomain.domain] ?? weakestDomain.domain
-    : null;
-  const strongestLabel = strongestDomain
-    ? DOMAIN_LABELS[strongestDomain.domain] ?? strongestDomain.domain
-    : null;
-  const sameExtreme =
-    weakestDomain &&
-    strongestDomain &&
-    weakestDomain.domain === strongestDomain.domain;
+  const band = orgBand(overallScore);
 
   return (
-    <section className="flex min-w-0 flex-col">
+    <section
+      className="flex h-full min-w-0 flex-col rounded-md border border-line bg-surface p-6 @min-[640px]:p-7"
+      style={{ boxShadow: `inset 3px 0 0 ${band.color}` }}
+    >
       {reuseNotice && (
         <div
           className="mb-5 border-l-2 border-brand py-2 pl-3 text-[13px] leading-snug text-brand-strong"
@@ -53,9 +40,10 @@ export default function OverviewHealthHero({
           {reuseNotice}
         </div>
       )}
-      <p className="eyebrow">How healthy is the CRM</p>
-      <h2 className="sr-only">Overall health</h2>
-      <div className="mt-3">
+      <h2 className="font-heading text-xl font-semibold tracking-tight text-ink">
+        Overall health
+      </h2>
+      <div className="mt-4">
         <ScoreGauge
           score={overallScore}
           priorScore={priorScore}
@@ -69,31 +57,17 @@ export default function OverviewHealthHero({
           {explanation}
         </p>
       )}
-      {(dominantState || weakestLabel || strongestLabel) && (
-        <dl className="mt-5 grid max-w-2xl grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-3">
-          {dominantState && (
-            <WhyFact label="Dominant issue" swatch={dominantState.color}>
-              {dominantState.label}
-              <span className="mono ml-1.5 text-ink-muted">
-                {formatNumber(dominantState.count)}
-                {Number.isFinite(dominantState.pct) ? ` · ${dominantState.pct}%` : ""}
-              </span>
-            </WhyFact>
-          )}
-          {weakestLabel && (
-            <WhyFact label="Weakest dimension">
-              {weakestLabel}
-              <span className="mono ml-1.5 text-ink-muted">{weakestDomain.score}</span>
-            </WhyFact>
-          )}
-          {strongestLabel && !sameExtreme && (
-            <WhyFact label="Strongest dimension">
-              {strongestLabel}
-              <span className="mono ml-1.5 text-ink-muted">{strongestDomain.score}</span>
-            </WhyFact>
-          )}
-        </dl>
-      )}
+      <dl className="mt-auto grid grid-cols-3 gap-x-8 gap-y-3 border-t border-line pt-4">
+        <HeroFact label="Checked">
+          {formatNumber(recordsInScope)}
+        </HeroFact>
+        <HeroFact label="Duplicates">
+          {formatNumber(duplicateCount)}
+        </HeroFact>
+        <HeroFact label="Modules">
+          {formatNumber(moduleCount)}
+        </HeroFact>
+      </dl>
     </section>
   );
 }

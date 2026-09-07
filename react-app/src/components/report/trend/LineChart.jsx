@@ -1,7 +1,7 @@
-const HEIGHT = 220;
+const HEIGHT = 360;
 const TOP = 16;
-const BOTTOM = 30;
-const LEFT_PERCENT = 4;
+const BOTTOM = 36;
+const LEFT_PERCENT = 4.5;
 const RIGHT_PERCENT = 98;
 
 export const TREND_SERIES_COLORS = [
@@ -15,6 +15,30 @@ export const TREND_SERIES_COLORS = [
 
 export function trendSeriesColor(index) {
   return TREND_SERIES_COLORS[index % TREND_SERIES_COLORS.length];
+}
+
+function uniqueAxisPoints(points) {
+  const seen = new Set();
+  const unique = [];
+  for (const point of points) {
+    const time = new Date(point.timestamp).getTime();
+    if (!Number.isFinite(time) || seen.has(time)) continue;
+    seen.add(time);
+    unique.push(point);
+  }
+  unique.sort((left, right) => new Date(left.timestamp) - new Date(right.timestamp));
+  if (unique.length <= 8) return unique;
+  const ticks = [unique[0]];
+  const inner = 4;
+  for (let step = 1; step <= inner; step += 1) {
+    const index = Math.round((step / (inner + 1)) * (unique.length - 1));
+    const candidate = unique[index];
+    if (candidate !== ticks[ticks.length - 1]) ticks.push(candidate);
+  }
+  if (unique[unique.length - 1] !== ticks[ticks.length - 1]) {
+    ticks.push(unique[unique.length - 1]);
+  }
+  return ticks;
 }
 
 export default function LineChart({ seriesGroups, averageScore }) {
@@ -36,12 +60,12 @@ export default function LineChart({ seriesGroups, averageScore }) {
   const orderedPoints = [...points].sort(
     (left, right) => new Date(left.timestamp) - new Date(right.timestamp)
   );
-  const firstPeriod = orderedPoints[0]?.period;
-  const lastPeriod = orderedPoints[orderedPoints.length - 1]?.period;
+  const axisTicks = uniqueAxisPoints(orderedPoints);
+  const annotateLast = groups.length === 1 && groups[0].series?.length;
 
   return (
     <svg
-      className="mt-1 block h-[220px] w-full overflow-hidden"
+      className="block h-[360px] w-full overflow-visible"
       role="img"
       aria-label="Score over time by module"
       height={HEIGHT}
@@ -53,13 +77,13 @@ export default function LineChart({ seriesGroups, averageScore }) {
             x2={`${RIGHT_PERCENT}%`}
             y1={y(gridScore)}
             y2={y(gridScore)}
-            className="stroke-line"
+            className={gridScore === 50 ? "stroke-line-strong" : "stroke-line"}
             strokeWidth="1"
           />
           <text
-            x="3%"
+            x="3.2%"
             y={y(gridScore) + 4}
-            className="mono fill-ink-muted text-[9px]"
+            className="mono fill-ink-muted text-[11px]"
             textAnchor="end"
           >
             {gridScore}
@@ -67,18 +91,30 @@ export default function LineChart({ seriesGroups, averageScore }) {
         </g>
       ))}
       {typeof averageScore === "number" && (
-        <line
-          x1={`${LEFT_PERCENT}%`}
-          x2={`${RIGHT_PERCENT}%`}
-          y1={y(averageScore)}
-          y2={y(averageScore)}
-          className="stroke-line-strong"
-          strokeWidth="1"
-          strokeDasharray="4 4"
-        />
+        <g>
+          <line
+            x1={`${LEFT_PERCENT}%`}
+            x2={`${RIGHT_PERCENT}%`}
+            y1={y(averageScore)}
+            y2={y(averageScore)}
+            className="stroke-ink-muted"
+            strokeWidth="1"
+            strokeDasharray="4 4"
+          />
+          <text
+            x={`${RIGHT_PERCENT}%`}
+            y={y(averageScore) - 6}
+            className="mono fill-ink-muted text-[10px]"
+            textAnchor="end"
+          >
+            avg {averageScore.toFixed(0)}
+          </text>
+        </g>
       )}
       {groups.map((group, groupIndex) => {
         const color = trendSeriesColor(groupIndex);
+        const label = group.label || group.moduleApiName;
+        const lastPoint = group.series[group.series.length - 1];
         return (
           <g key={group.moduleApiName}>
             {group.series.slice(1).map((point, index) => {
@@ -103,37 +139,44 @@ export default function LineChart({ seriesGroups, averageScore }) {
                 key={`${point.scanId}-${index}`}
                 cx={x(point, index, group.series.length)}
                 cy={y(point.score)}
-                r="4"
+                r="4.5"
                 className="fill-surface"
                 stroke={color}
                 strokeWidth="2.5"
               >
-                <title>{`${group.moduleApiName}: ${point.score} - ${point.period} - ${point.recordCount.toLocaleString("en-IN")} records`}</title>
+                <title>{`${label}: ${point.score} - ${point.period} - ${point.recordCount.toLocaleString("en-IN")} records`}</title>
               </circle>
             ))}
+            {annotateLast && lastPoint && (
+              <text
+                x={x(lastPoint, group.series.length - 1, group.series.length)}
+                y={y(lastPoint.score) - 12}
+                className="mono fill-ink text-[12px] font-semibold"
+                textAnchor="middle"
+              >
+                {lastPoint.score}
+              </text>
+            )}
           </g>
         );
       })}
-      {firstPeriod && (
+      {axisTicks.map((point) => (
         <text
-          x={`${LEFT_PERCENT}%`}
-          y={HEIGHT - 7}
-          className="fill-ink-muted text-[9px]"
-          textAnchor="start"
+          key={point.timestamp}
+          x={x(point, 0, 1)}
+          y={HEIGHT - 10}
+          className="fill-ink-muted text-[11px]"
+          textAnchor={
+            point === axisTicks[0]
+              ? "start"
+              : point === axisTicks[axisTicks.length - 1]
+                ? "end"
+                : "middle"
+          }
         >
-          {firstPeriod}
+          {point.period}
         </text>
-      )}
-      {lastPeriod && lastPeriod !== firstPeriod && (
-        <text
-          x={`${RIGHT_PERCENT}%`}
-          y={HEIGHT - 7}
-          className="fill-ink-muted text-[9px]"
-          textAnchor="end"
-        >
-          {lastPeriod}
-        </text>
-      )}
+      ))}
     </svg>
   );
 }

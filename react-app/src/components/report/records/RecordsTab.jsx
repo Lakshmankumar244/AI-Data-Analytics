@@ -4,7 +4,6 @@ import * as api from "../../../data/client";
 import { stateMeta } from "../../../utils/bands";
 import { formatNumber } from "../../../utils/format";
 import { groupOwnerAnalytics, recordOwnerQueryKeys } from "../../../data/ownerAnalytics";
-import Band from "../../shared/Band";
 import LoadingState from "../../shared/LoadingState";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,6 +17,16 @@ const RECORD_FILTERS = [
   { id: "suspected_duplicate", label: "Possible duplicate" },
   { id: "confirmed_duplicate", label: "Certain duplicate" },
 ];
+
+const SEVERITY_TONE = {
+  high: { background: "var(--risk-soft)", color: "var(--risk)" },
+  medium: { background: "var(--attention-soft)", color: "var(--attention)" },
+  low: { background: "var(--surface-sunken)", color: "var(--muted)" },
+};
+
+function filterLabel(stateId) {
+  return RECORD_FILTERS.find((state) => state.id === stateId)?.label || stateId;
+}
 
 function formatDate(iso) {
   if (!iso) return "N/A";
@@ -34,10 +43,82 @@ function recordTitle(record) {
   return "Unnamed record";
 }
 
+function recordIdentity(record) {
+  return record.crmRecordId || record.findingId || record.recordRef || null;
+}
+
 function matchesActiveState(record, activeState) {
   if (!activeState) return true;
   if (!SUPPORTED_STATES.has(activeState)) return false;
   return record.state === activeState;
+}
+
+function issueFields(record) {
+  const issues = record.issues ?? [];
+  if (issues.length === 0) return null;
+  const visible = issues
+    .slice(0, 4)
+    .map((issue) => issue.fieldLabel || issue.fieldApiName)
+    .join(", ");
+  const extra = issues.length > 4 ? ` +${issues.length - 4} more` : "";
+  return `${visible}${extra}`;
+}
+
+function SeverityBadge({ severity }) {
+  if (!severity) return null;
+  const tone = SEVERITY_TONE[String(severity).toLowerCase()];
+  if (!tone) return null;
+  return (
+    <span
+      className="inline-flex shrink-0 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
+      style={{ background: tone.background, color: tone.color }}
+    >
+      {severity}
+    </span>
+  );
+}
+
+function RecordRow({ record }) {
+  const identity = recordIdentity(record);
+  const title = recordTitle(record);
+  const fields = issueFields(record);
+  const created = record.createdTime || record.computedAt;
+  const createdBy = record.createdBy || record.ownerName;
+
+  return (
+    <tr className="hover:bg-surface-sunken/70">
+      <td className="min-w-[10rem] border-b border-line py-3 pr-4 align-top">
+        <p className="font-semibold tracking-tight text-ink [overflow-wrap:anywhere]">
+          {title}
+        </p>
+        {identity && identity !== title && (
+          <p className="mono mt-0.5 text-[11px] text-ink-muted [overflow-wrap:anywhere]">
+            {identity}
+          </p>
+        )}
+      </td>
+      <td className="min-w-[6rem] border-b border-line px-3 py-3 align-top text-ink-soft">
+        {record.module || "—"}
+      </td>
+      <td className="min-w-[16rem] border-b border-line px-3 py-3 align-top">
+        <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-1">
+          <SeverityBadge severity={record.severity} />
+          <p className="min-w-0 text-[13px] leading-snug text-ink">
+            {record.reason || "Quality issue detected"}
+          </p>
+        </div>
+        {fields && (
+          <p className="mt-1 text-[12px] leading-snug text-ink-muted">{fields}</p>
+        )}
+      </td>
+      <td className="min-w-[8rem] border-b border-line px-3 py-3 align-top text-ink-soft">
+        {createdBy || "—"}
+      </td>
+      <td className="min-w-[7rem] border-b border-line py-3 pl-3 align-top">
+        <span className="mono text-[12px] text-ink-muted">{formatDate(created)}</span>
+      </td>
+    </tr>
+  );
 }
 
 export default function RecordsTab() {
@@ -100,8 +181,8 @@ export default function RecordsTab() {
   const emptyHint = useMemo(() => {
     if (activeState === "proper") {
       return Number.isFinite(scanCleanCount) && scanCleanCount > 0
-        ? `${formatNumber(scanCleanCount)} clean records were counted in this scan. They are not stored as a list — only flagged findings are kept for investigation.`
-        : "Clean records are not listed. Only flagged findings are stored for investigation.";
+        ? `${formatNumber(scanCleanCount)} clean records were counted; they are not stored as a list.`
+        : "Clean records are not listed.";
     }
     if (activeState && !SUPPORTED_STATES.has(activeState)) {
       return "This classification is not stored on the current scan yet.";
@@ -110,9 +191,9 @@ export default function RecordsTab() {
       return "No records match the selected state and module filters.";
     }
     if (scanDepth === "quick") {
-      return "Quick scans exclude optional missing fields. Those blanks may still affect completeness.";
+      return "No matching records. Quick scans skip optional missing fields.";
     }
-    return "No records matched the finding rules for this scan depth.";
+    return "No matching records.";
   }, [activeState, scanCleanCount, scanDepth]);
 
   const inScopeCount = activeState
@@ -121,56 +202,72 @@ export default function RecordsTab() {
   const showSampleNote =
     data?.summary?.measured &&
     Number(data.summary.affectedRecordCount) > Number(data.summary.storedSampleCount || 0);
+  const heading = activeState
+    ? `${filterLabel(activeState)} · ${formatNumber(inScopeCount)}`
+    : `Records · ${formatNumber(inScopeCount)}`;
 
   return (
-    <div className="flex min-w-0 flex-col py-4 pb-12 @max-[640px]:pb-8">
-      <section className="min-w-0">
-        <header className="mb-2.5">
-          <p className="eyebrow">Records</p>
-        </header>
-
-        <div
-          className="mb-3 grid grid-cols-6 gap-x-4 gap-y-3 @max-[900px]:grid-cols-3 @max-[640px]:grid-cols-2"
-          role="tablist"
-          aria-label="Filter by record state"
-        >
-          {RECORD_FILTERS.map((state) => {
-            const meta = stateMeta(state.id);
-            const isActive = activeState === state.id;
-            const count = listedCounts
-              ? Number(listedCounts[state.id] || 0)
-              : null;
-            return (
-              <button
-                key={state.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                className={cn(
-                  "m-0 flex min-w-0 cursor-pointer flex-col items-start gap-1 border-r-0 border-b-0 border-l-0 border-t-[3px] bg-transparent p-0 pt-2 pb-1 text-left font-[inherit]",
-                  isActive ? "text-ink-soft" : "text-ink-muted"
-                )}
-                style={{
-                  borderTopColor: isActive
-                    ? meta?.color || "var(--brand)"
-                    : "transparent",
-                }}
-                onClick={() => setFilter({ focusState: isActive ? null : state.id })}
-              >
-                <span className="text-[10px] font-bold tracking-wide uppercase">
+    <div className="flex min-w-0 flex-col gap-5 py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
+      <div
+        className="grid min-w-0 grid-cols-2 gap-2 @min-[640px]:grid-cols-3 @min-[1100px]:grid-cols-6"
+        role="tablist"
+        aria-label="Filter by record state"
+      >
+        {RECORD_FILTERS.map((state) => {
+          const meta = stateMeta(state.id);
+          const isActive = activeState === state.id;
+          const count = listedCounts
+            ? Number(listedCounts[state.id] || 0)
+            : null;
+          return (
+            <button
+              key={state.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={cn(
+                "m-0 flex min-w-0 cursor-pointer flex-col items-start gap-1 rounded-md border px-3 py-2.5 text-left font-[inherit]",
+                isActive
+                  ? "border-line bg-surface text-ink"
+                  : "border-transparent bg-surface/80 text-ink-muted hover:border-line hover:text-ink-soft"
+              )}
+              style={
+                isActive
+                  ? { boxShadow: `inset 0 3px 0 ${meta?.color || "var(--brand)"}` }
+                  : undefined
+              }
+              onClick={() => setFilter({ focusState: isActive ? null : state.id })}
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span
+                  className="size-1.5 shrink-0 rounded-full"
+                  style={{ background: meta?.color || "var(--muted)" }}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 text-[11px] font-semibold leading-tight tracking-wide uppercase">
                   {state.label}
                 </span>
-                <strong className="mono text-lg font-semibold tracking-tight text-ink">
-                  {count === null ? "—" : formatNumber(count)}
-                </strong>
-              </button>
-            );
-          })}
-        </div>
+              </span>
+              <strong
+                className="mono text-[20px] font-semibold tracking-tight"
+                style={{
+                  color: isActive && meta?.color ? meta.color : "var(--ink)",
+                }}
+              >
+                {count === null ? "—" : formatNumber(count)}
+              </strong>
+            </button>
+          );
+        })}
+      </div>
 
-        <div className="mb-2.5 flex justify-end @max-[640px]:justify-stretch">
+      <section className="flex min-w-0 flex-col rounded-md border border-line bg-surface p-5 @min-[640px]:p-6">
+        <header className="mb-4 flex shrink-0 flex-wrap items-end justify-between gap-3 border-b border-line pb-3">
+          <h2 className="font-heading text-xl font-semibold tracking-tight text-ink">
+            {heading}
+          </h2>
           <form
-            className="min-w-0 @max-[640px]:w-full"
+            className="min-w-0 @max-[760px]:w-full"
             onSubmit={(event) => {
               event.preventDefault();
               setSubmittedQuery(query.trim());
@@ -182,13 +279,13 @@ export default function RecordsTab() {
               placeholder="Search records..."
               aria-label="Search records"
               onChange={(event) => setQuery(event.target.value)}
-              className="min-h-[34px] w-[min(280px,100%)] border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-muted @max-[640px]:w-full"
+              className="min-h-[34px] w-[min(280px,100%)] border border-line bg-paper px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-muted @max-[760px]:w-full"
             />
           </form>
-        </div>
+        </header>
 
         {showSampleNote && (
-          <p className="mb-2.5 text-[11px] leading-normal text-brand-strong">
+          <p className="mb-4 text-[13px] leading-relaxed text-ink-muted">
             Showing up to {formatNumber(data.summary.storedSampleCount)} representative
             flagged records from {formatNumber(data.summary.affectedRecordCount)} detected.
           </p>
@@ -201,81 +298,53 @@ export default function RecordsTab() {
         ) : tableLoading || !data ? (
           <LoadingState label="Loading records" />
         ) : !data.summary?.measured ? (
-          <p className="max-w-[46ch] text-[13px] leading-normal text-ink-soft">
-            Record-level findings were not measured in this scan. Run a new scan after deploying this feature.
+          <p className="max-w-[46ch] text-sm leading-relaxed text-ink-soft">
+            Record-level findings were not measured in this scan.
           </p>
+        ) : rows.length === 0 ? (
+          <div className="py-8">
+            <p className="font-heading text-lg font-semibold tracking-tight text-ink">
+              No matching records
+            </p>
+            <p className="mt-1.5 max-w-[46ch] text-sm leading-relaxed text-ink-muted">
+              {emptyHint}
+            </p>
+          </div>
         ) : (
           <>
-            <div className="min-w-0 overflow-x-auto">
-              <table className="w-full border-separate border-spacing-0 text-xs">
+            <div className="min-w-0 overflow-x-auto overscroll-x-contain">
+              <table className="w-full min-w-[52rem] border-collapse text-[13px]">
+                <caption className="sr-only">
+                  Flagged records, including module, issue, created by, and created date
+                </caption>
                 <thead>
                   <tr>
-                    {["Record", "Module", "State", "What's wrong", "Owner", "Detected"].map(
-                      (heading) => (
-                        <th
-                          key={heading}
-                          className="border-b border-line px-2.5 py-2 text-left text-[10px] font-bold tracking-wider whitespace-nowrap text-ink-muted uppercase"
-                        >
-                          {heading}
-                        </th>
-                      )
-                    )}
+                    <th className="min-w-[10rem] border-b border-line py-2.5 pr-4 text-left align-middle">
+                      <span className="eyebrow">Record</span>
+                    </th>
+                    <th className="min-w-[6rem] border-b border-line px-3 py-2.5 text-left align-middle">
+                      <span className="eyebrow">Module</span>
+                    </th>
+                    <th className="min-w-[16rem] border-b border-line px-3 py-2.5 text-left align-middle">
+                      <span className="eyebrow">What is wrong with it</span>
+                    </th>
+                    <th className="min-w-[8rem] border-b border-line px-3 py-2.5 text-left align-middle">
+                      <span className="eyebrow">Created by</span>
+                    </th>
+                    <th className="min-w-[7rem] border-b border-line py-2.5 pl-3 text-left align-middle">
+                      <span className="eyebrow">Created</span>
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="[&>tr:last-child>td]:border-b-0">
-                  {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-0 py-10">
-                        <div className="flex flex-col gap-1.5">
-                          <strong className="text-[15px] font-semibold text-ink">
-                            No matching records
-                          </strong>
-                          <span className="max-w-[440px] text-xs text-ink-muted">
-                            {emptyHint}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
+                <tbody>
                   {rows.map((record) => (
-                    <tr
-                      key={record.findingId}
-                      className="[&:not(:only-child)]:hover:bg-surface-sunken"
-                    >
-                      <td className="border-b border-line px-2.5 py-1.5 align-middle">
-                        <span className="text-[13px] font-semibold text-ink">
-                          {recordTitle(record)}
-                        </span>
-                      </td>
-                      <td className="border-b border-line px-2.5 py-1.5 align-middle">
-                        {record.module}
-                      </td>
-                      <td className="border-b border-line px-2.5 py-1.5 align-middle">
-                        <Band band={stateMeta(record.state)} size="sm" />
-                      </td>
-                      <td className="border-b border-line px-2.5 py-1.5 align-middle">
-                        <div>{record.reason}</div>
-                        {record.issues?.length > 0 && (
-                          <div className="mt-0.5 text-[11px] text-ink-muted">
-                            {record.issues.slice(0, 4).map((issue) => issue.fieldLabel || issue.fieldApiName).join(", ")}
-                            {record.issues.length > 4 ? ` +${record.issues.length - 4} more` : ""}
-                          </div>
-                        )}
-                      </td>
-                      <td className="border-b border-line px-2.5 py-1.5 align-middle">
-                        {record.ownerName}
-                      </td>
-                      <td className="mono border-b border-line px-2.5 py-1.5 align-middle">
-                        {formatDate(record.computedAt)}
-                      </td>
-                    </tr>
+                    <RecordRow key={record.findingId} record={record} />
                   ))}
                 </tbody>
               </table>
             </div>
-
-            <div className="mt-3 flex items-center justify-between gap-4 @max-[640px]:flex-col @max-[640px]:items-start">
-              <span className="text-xs text-ink-muted">
+            <div className="mt-4 flex items-center justify-between gap-4 @max-[760px]:flex-col @max-[760px]:items-start">
+              <span className="text-[13px] text-ink-muted">
                 {formatNumber(inScopeCount)} record{inScopeCount === 1 ? "" : "s"} in this view
               </span>
               <div className="flex items-center gap-2">
@@ -288,7 +357,7 @@ export default function RecordsTab() {
                 >
                   Previous
                 </Button>
-                <span className="mono text-xs text-ink-muted">
+                <span className="mono text-[13px] text-ink-muted">
                   Page {page}
                 </span>
                 <Button

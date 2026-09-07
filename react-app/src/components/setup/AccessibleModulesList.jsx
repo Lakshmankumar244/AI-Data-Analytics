@@ -55,47 +55,30 @@ export default function AccessibleModulesList({ modules, selected, onToggle, onS
 
   return (
     <div className="flex flex-col gap-5">
-      {selectedItems.length > 0 && (
-        <div className="flex flex-wrap gap-x-2 gap-y-2" aria-label="Selected modules">
-          {selectedItems.map((module) => (
-            <span
-              key={module.apiName}
-              className="inline-flex min-h-8 items-center gap-1.5 bg-surface-sunken py-1 pr-1.5 pl-2.5 text-[13px] font-medium text-ink"
-            >
-              {module.label}
-              <button
-                type="button"
-                className="grid size-5 place-items-center border-0 bg-transparent p-0 text-base leading-none text-ink-muted hover:text-ink"
-                aria-label={`Remove ${module.label}`}
-                onClick={() => onToggle(module.apiName)}
-              >
-                {"\u00d7"}
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
       <div className="relative min-w-0" ref={rootRef}>
         <button
           type="button"
           className={cn(
-            "inline-flex items-center gap-2 border-b-2 py-2 text-[13px] font-semibold transition-colors",
+            "flex w-full min-w-0 cursor-pointer items-center justify-between gap-3 border border-line bg-paper px-3 py-2.5 text-left text-[13px] font-semibold text-ink transition-colors",
             open
               ? "border-brand text-brand-strong"
-              : "border-transparent text-ink-soft hover:text-ink"
+              : "hover:border-line-strong hover:text-ink"
           )}
           aria-expanded={open}
           aria-haspopup="listbox"
           onClick={() => setOpen((current) => !current)}
         >
-          {selectedItems.length === 0
-            ? "Choose modules"
-            : allSelected
-              ? "All visible modules"
-              : `${selectedItems.length} selected`}
-          <span className="mono text-[11px] text-ink-muted">{selectedItems.length}</span>
-          <ChevronIcon open={open} />
+          <span className="min-w-0 truncate">
+            {selectedItems.length === 0
+              ? "Choose modules"
+              : `${selectedItems.length} ${
+                  selectedItems.length === 1 ? "module" : "modules"
+                } selected`}
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="mono text-[11px] text-ink-muted">{selectedItems.length}</span>
+            <ChevronIcon open={open} />
+          </span>
         </button>
         {open && (
           <div className="absolute top-[calc(100%+8px)] z-30 w-full min-w-[min(100%,20rem)] bg-surface py-2 shadow-floating ring-1 ring-line">
@@ -148,7 +131,7 @@ export default function AccessibleModulesList({ modules, selected, onToggle, onS
                     </label>
                     <span className="mono shrink-0 text-[13px] text-ink-muted">
                       {unavailable
-                        ? "0 records \u00b7 No records available"
+                        ? "0 records"
                         : `${formatNumber(module.recordCount)} records`}
                     </span>
                   </li>
@@ -158,6 +141,27 @@ export default function AccessibleModulesList({ modules, selected, onToggle, onS
           </div>
         )}
       </div>
+
+      {selectedItems.length > 0 && (
+        <div className="flex flex-wrap gap-x-2 gap-y-2" aria-label="Selected modules">
+          {selectedItems.map((module) => (
+            <span
+              key={module.apiName}
+              className="inline-flex min-h-8 items-center gap-1.5 bg-surface-sunken py-1 pr-1.5 pl-2.5 text-[13px] font-medium text-ink"
+            >
+              {module.label}
+              <button
+                type="button"
+                className="grid size-5 place-items-center border-0 bg-transparent p-0 text-base leading-none text-ink-muted hover:text-ink"
+                aria-label={`Remove ${module.label}`}
+                onClick={() => onToggle(module.apiName)}
+              >
+                {"\u00d7"}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

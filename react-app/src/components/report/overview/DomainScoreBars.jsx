@@ -1,29 +1,13 @@
 import ScoreBar from "../../shared/ScoreBar";
 import { DOMAIN_LABELS } from "../../../utils/bands";
 import { groupDomainScores } from "./overviewModel";
-import { cn } from "@/lib/utils";
 
-const GROUP_META = [
-  {
-    id: "attention",
-    label: "Pulling the score down",
-    eyebrow: "text-attention",
-  },
-  {
-    id: "healthy",
-    label: "Holding the score up",
-    eyebrow: "text-stable",
-  },
-  {
-    id: "unavailable",
-    label: "Not measured",
-    eyebrow: "text-ink-muted",
-  },
-];
+const GROUP_ORDER = ["attention", "healthy", "unavailable"];
 
 export default function DomainScoreBars({ domainScores, unmeasuredDomains = [] }) {
   const groups = groupDomainScores(domainScores, unmeasuredDomains);
   const hasScores = (domainScores ?? []).length > 0;
+  const items = GROUP_ORDER.flatMap((id) => groups[id] ?? []);
 
   if (!hasScores) {
     return (
@@ -34,27 +18,16 @@ export default function DomainScoreBars({ domainScores, unmeasuredDomains = [] }
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      {GROUP_META.map((group) => {
-        const items = groups[group.id];
-        if (!items.length) return null;
-        return (
-          <div key={group.id}>
-            <p className={cn("eyebrow mb-0.5", group.eyebrow)}>{group.label}</p>
-            <div>
-              {items.map((domain) => (
-                <ScoreBar
-                  key={domain.domain}
-                  label={DOMAIN_LABELS[domain.domain] ?? domain.domain}
-                  score={domain.score}
-                  applicable={domain.applicable}
-                  reason={domain.reason}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
+    <div className="grid min-w-0 grid-cols-1 @min-[480px]:grid-cols-2 @min-[480px]:gap-x-8">
+      {items.map((domain) => (
+        <ScoreBar
+          key={domain.domain}
+          label={DOMAIN_LABELS[domain.domain] ?? domain.domain}
+          score={domain.score}
+          applicable={domain.applicable}
+          reason={domain.reason}
+        />
+      ))}
     </div>
   );
 }

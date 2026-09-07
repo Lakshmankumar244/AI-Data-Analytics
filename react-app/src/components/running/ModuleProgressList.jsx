@@ -54,17 +54,17 @@ export default function ModuleProgressList({
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <div className="mono mt-1.5 text-xs text-ink-muted">
-              {isQueued
-                ? "Waiting to start"
-                : isDone && !exactTotal
-                ? "0 records matched the selected range"
-                : exactTotal
-                ? `${formatNumber(p?.scanned ?? 0)} / ${formatNumber(exactTotal)} records`
-                : mod.recordCount
-                ? `Preparing up to ${formatNumber(mod.recordCount)} records`
-                : "Preparing record count"}
-            </div>
+            {!isQueued && (
+              <div className="mono mt-1.5 text-xs text-ink-muted">
+                {isDone && !exactTotal
+                  ? "0 records in range"
+                  : exactTotal
+                  ? `${formatNumber(p?.scanned ?? 0)} / ${formatNumber(exactTotal)} records`
+                  : mod.recordCount
+                  ? `Preparing up to ${formatNumber(mod.recordCount)} records`
+                  : "Preparing record count"}
+              </div>
+            )}
           </li>
         );
       })}

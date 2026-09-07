@@ -11,7 +11,6 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
-  SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
@@ -391,7 +390,7 @@ function FilterCommand({
   return (
     <div
       className={cn(
-        "grid min-w-0 w-full divide-x divide-line @max-[760px]:hidden",
+        "grid min-w-0 w-full divide-x divide-line @max-[960px]:hidden",
         showUsers
           ? "grid-cols-[minmax(8rem,1.5fr)_repeat(4,minmax(5rem,1fr))]"
           : "grid-cols-[minmax(8rem,1.5fr)_repeat(3,minmax(5rem,1fr))]"
@@ -431,18 +430,18 @@ export default function FilterBar() {
 
   return (
     <header className="min-w-0">
-      <ContentContainer className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 py-[var(--app-bar-padding-block,6px)] @max-[760px]:grid-cols-[minmax(0,1fr)_auto]">
+      <ContentContainer className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 py-[var(--app-bar-padding-block,6px)] @max-[960px]:grid-cols-[minmax(0,1fr)_auto]">
         <div className="flex min-w-0 items-center gap-2.5">
           <Button type="button" variant="outline" size="sm" onClick={showHome}>
             <span aria-hidden="true">←</span> Reports
           </Button>
-          <div className="min-w-0 border-r border-line pr-2.5 @max-[900px]:border-r-0 @max-[900px]:pr-0">
+          <div className="min-w-0 border-r border-line pr-2.5 @max-[960px]:border-r-0 @max-[960px]:pr-0">
             <h1 className="max-w-[clamp(96px,14cqi,200px)] truncate text-[13px] leading-tight font-semibold">
               {filters.displayedModules.map((module) => module.label).join(" + ") || "Analytics"}
             </h1>
             {filters.accountLabel && (
               <p
-                className="mt-0.5 hidden max-w-[clamp(96px,14cqi,200px)] truncate text-[11px] text-ink-muted @min-[901px]:block"
+                className="mt-0.5 hidden max-w-[clamp(96px,14cqi,200px)] truncate text-[11px] text-ink-muted @min-[961px]:block"
                 title={filters.accountLabel}
               >
                 {filters.accountLabel} · {filters.depthLabel} scan
@@ -459,7 +458,7 @@ export default function FilterBar() {
               type="button"
               variant="outline"
               size="sm"
-              className="hidden @max-[760px]:inline-flex print:hidden"
+              className="hidden @max-[960px]:inline-flex print:hidden"
               onClick={() => setSheetOpen(true)}
             >
               <SlidersHorizontal />
@@ -468,9 +467,6 @@ export default function FilterBar() {
             <SheetContent side="right" className="bg-surface text-ink" showCloseButton>
               <SheetHeader>
                 <SheetTitle>Report filters</SheetTitle>
-                <SheetDescription>
-                  Changes apply immediately to the current report.
-                </SheetDescription>
               </SheetHeader>
               <div className="min-h-0 flex-1 overflow-auto px-4 pb-2">
                 <FilterCommand variant="sheet" {...filters} />
