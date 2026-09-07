@@ -22,7 +22,11 @@ from common.core import (
     with_fragment_parameter,
 )
 from connections.repository import find_active_connection
-from zoho.client import fetch_accessible_modules, fetch_organization_metadata
+from zoho.client import (
+    fetch_accessible_modules,
+    fetch_organization_metadata,
+    refresh_module_record_counts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +68,37 @@ def migrate_legacy_connection(datastore, user):
     )
     logger.info("Migrated legacy development connection to Catalyst user %s", user_id)
     return True
+
+def refresh_and_store_accessible_module_counts(datastore, connection_row: dict) -> list:
+    """Refresh connection module totals from Zoho without changing past scans."""
+    try:
+        modules = json.loads(connection_row.get("accessible_modules") or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        modules = []
+    if not isinstance(modules, list) or not modules:
+        return []
+
+    try:
+        access_token, api_domain, _token_refreshed = get_connection_access_token(
+            datastore, connection_row
+        )
+        refreshed = refresh_module_record_counts(access_token, api_domain, modules)
+    except Exception as exc:  # noqa: BLE001 - keep the stored list if Zoho is unavailable
+        logger.warning("Could not refresh Zoho module record counts: %s", exc)
+        return modules
+
+    try:
+        datastore.table("zoho_connections").update_row(
+            {
+                "ROWID": connection_row["ROWID"],
+                "accessible_modules": json.dumps(refreshed),
+                "modules_synced_at": to_catalyst_datetime(datetime.now(timezone.utc)),
+            }
+        )
+    except Exception as exc:  # noqa: BLE001 - still return live counts to the client
+        logger.warning("Could not persist refreshed module record counts: %s", exc)
+    return refreshed
+
 
 def get_connection_access_token(datastore, connection_row: dict):
     expires_at_value = connection_row.get("token_expires_at")
@@ -341,6 +376,20 @@ def get_connection(request: Request, datastore):
         )
     )
 
+    refresh_modules = str(request.args.get("refreshModules") or "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    try:
+        accessible_modules = json.loads(row.get("accessible_modules") or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        accessible_modules = []
+    if refresh_modules:
+        accessible_modules = refresh_and_store_accessible_module_counts(
+            datastore, row
+        )
+
     connection = {
         "connectionId": str(row["ROWID"]),
         "organizationId": row.get("zoho_org_id", ""),
@@ -358,7 +407,7 @@ def get_connection(request: Request, datastore):
             "name": row.get("connected_name", ""),
             "email": row.get("connected_email", ""),
         },
-        "accessibleModules": json.loads(row.get("accessible_modules") or "[]"),
+        "accessibleModules": accessible_modules,
         "availableConnections": available_connections,
         "legacyMigrated": legacy_migrated,
     }

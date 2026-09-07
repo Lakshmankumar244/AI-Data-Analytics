@@ -9,8 +9,9 @@ const FUNCTION_BASE_URL = "/server/ai_data_analytics_function";
 
 export const ZOHO_CONSENT_URL = `${FUNCTION_BASE_URL}/api/zoho/consent`;
 
-export async function getConnection() {
-  const res = await fetch(`${FUNCTION_BASE_URL}/api/zoho/connection`, {
+export async function getConnection({ refreshModules = false } = {}) {
+  const query = refreshModules ? "?refreshModules=1" : "";
+  const res = await fetch(`${FUNCTION_BASE_URL}/api/zoho/connection${query}`, {
     credentials: "same-origin",
   });
   return readJsonResponse(res, "getConnection");

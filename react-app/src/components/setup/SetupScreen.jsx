@@ -92,6 +92,24 @@ export default function SetupScreen() {
   }, [connection]);
 
   useEffect(() => {
+    if (!connection?.connectionId) return undefined;
+    let cancelled = false;
+    api
+      .getConnection({ refreshModules: true })
+      .then((nextConnection) => {
+        if (!cancelled && nextConnection) {
+          dispatch({ type: "connectionLoaded", connection: nextConnection });
+        }
+      })
+      .catch(() => {
+        // Keep the stored module list if live Zoho counts cannot be refreshed.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connection?.connectionId, dispatch]);
+
+  useEffect(() => {
     if (!scanConfig.modules.length) {
       setEstimate(null);
       return;

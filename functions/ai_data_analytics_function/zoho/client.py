@@ -110,6 +110,39 @@ def fetch_record_count(
     return resp.json().get("count", 0)
 
 
+def refresh_module_record_counts(
+    access_token: str,
+    api_domain: str,
+    modules: list,
+) -> list:
+    """Replace stored recordCount values with live Zoho CRM totals."""
+    candidates = [
+        dict(module)
+        for module in modules
+        if isinstance(module, dict) and module.get("apiName")
+    ]
+
+    def with_count(mod):
+        try:
+            mod["recordCount"] = fetch_record_count(
+                access_token, api_domain, mod["apiName"]
+            )
+        except requests.RequestException as exc:
+            logger.warning(
+                "Could not refresh record count for %s: %s", mod["apiName"], exc
+            )
+            try:
+                mod["recordCount"] = int(mod.get("recordCount") or 0)
+            except (TypeError, ValueError):
+                mod["recordCount"] = 0
+        return mod
+
+    if not candidates:
+        return []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        return list(pool.map(with_count, candidates))
+
+
 def build_count_criteria(conditions: list) -> str:
     """Build Zoho Search/count criteria from trusted field/operator/value tuples."""
     expressions = [

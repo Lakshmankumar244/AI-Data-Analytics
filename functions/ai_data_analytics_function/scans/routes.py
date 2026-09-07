@@ -21,6 +21,7 @@ from common.core import (
     get_current_user_id,
     json_response,
     to_catalyst_column_datetime,
+    to_zoho_datetime,
     validate_scan_config,
 )
 from connections.routes import get_connection_access_token
@@ -143,23 +144,46 @@ def _scope_conditions(config):
     return conditions
 
 
+def _scope_conditions_from_scan_row(scan_row):
+    conditions = []
+    clock_field = scan_row["clock_field"]
+    from_utc = scan_row.get("from_utc")
+    if from_utc:
+        conditions.append(
+            (clock_field, "greater_equal", to_zoho_datetime(from_utc))
+        )
+    conditions.append(
+        (clock_field, "less_than", to_zoho_datetime(scan_row["to_utc"]))
+    )
+    return conditions
+
+
+def _fetch_scoped_module_counts(access_token, api_domain, config):
+    criteria = build_count_criteria(_scope_conditions(config))
+    return {
+        module_name: fetch_record_count(
+            access_token, api_domain, module_name, criteria
+        )
+        for module_name in config["modules"]
+    }
+
+
 def _unchanged_since_previous(
-    access_token, api_domain, config, previous_scan, previous_modules
+    access_token,
+    api_domain,
+    config,
+    previous_scan,
+    previous_modules,
+    scoped_counts,
 ):
     previous_to = from_catalyst_datetime(previous_scan["to_utc"])
     previous_counts = {
         str(row.get("module_api_name") or ""): int(row.get("records_processed") or 0)
         for row in previous_modules
     }
-    scope_conditions = _scope_conditions(config)
     module_checks = []
     for module_name in config["modules"]:
-        scoped_count = fetch_record_count(
-            access_token,
-            api_domain,
-            module_name,
-            build_count_criteria(scope_conditions),
-        )
+        scoped_count = int(scoped_counts.get(module_name) or 0)
         modified = has_modified_records_since(
             access_token,
             api_domain,
@@ -228,6 +252,7 @@ def create_scan(request: Request, datastore):
         zcql, connection_row["ROWID"], config
     )
     change_checks = []
+    live_counts = {}
     if active_scan:
         return json_response(
             _reused_scan_response(
@@ -237,21 +262,25 @@ def create_scan(request: Request, datastore):
             )
         )
 
-    if (
-        previous_scan
-        and previous_modules
-        and _has_current_domain_results(zcql, previous_scan["ROWID"], config["modules"])
-    ):
-        try:
-            access_token, api_domain, _token_refreshed = get_connection_access_token(
-                datastore, connection_row
+    try:
+        access_token, api_domain, _token_refreshed = get_connection_access_token(
+            datastore, connection_row
+        )
+        live_counts = _fetch_scoped_module_counts(access_token, api_domain, config)
+        if (
+            previous_scan
+            and previous_modules
+            and _has_current_domain_results(
+                zcql, previous_scan["ROWID"], config["modules"]
             )
+        ):
             unchanged, change_checks = _unchanged_since_previous(
                 access_token,
                 api_domain,
                 config,
                 previous_scan,
                 previous_modules,
+                live_counts,
             )
             if unchanged:
                 return json_response(
@@ -262,10 +291,10 @@ def create_scan(request: Request, datastore):
                         change_checks,
                     )
                 )
-        except Exception as exc:  # noqa: BLE001 - uncertainty must allow a fresh scan
-            logger.warning(
-                "Change check failed; creating a fresh scan instead: %s", exc
-            )
+    except Exception as exc:  # noqa: BLE001 - uncertainty must allow a fresh scan
+        logger.warning(
+            "Live CRM count check failed; creating a fresh scan instead: %s", exc
+        )
 
     scan_id = f"scan_{uuid.uuid4().hex}"
     organization_timezone = connection_row.get("organization_timezone") or "UTC"
@@ -340,6 +369,7 @@ def create_scan(request: Request, datastore):
                     "records_downloaded": 0,
                     "records_processed": 0,
                     "batches_completed": 0,
+                    "expected_record_count": int(live_counts.get(module_api_name) or 0),
                 }
             )
         module_table.insert_rows(module_rows)
@@ -467,6 +497,7 @@ def discover_scan(request: Request, datastore, scan_id: str):
 
         discovered_modules = []
         field_plan_hashes = {}
+        count_criteria = build_count_criteria(_scope_conditions_from_scan_row(scan_row))
         for result in module_rows:
             module_row = result["scan_module_runs"]
             module_api_name = module_row["module_api_name"]
@@ -481,6 +512,20 @@ def discover_scan(request: Request, datastore, scan_id: str):
                     "fieldMetadata": field_metadata,
                 }
             )
+            try:
+                expected_record_count = fetch_record_count(
+                    access_token,
+                    api_domain,
+                    module_api_name,
+                    count_criteria,
+                )
+            except Exception as exc:  # noqa: BLE001 - keep the count captured at scan create
+                logger.warning(
+                    "Could not refresh live record count for %s: %s",
+                    module_api_name,
+                    exc,
+                )
+                expected_record_count = int(module_row.get("expected_record_count") or 0)
             module_table.update_row(
                 {
                     "ROWID": module_row["ROWID"],
@@ -490,6 +535,7 @@ def discover_scan(request: Request, datastore, scan_id: str):
                     ),
                     "field_plan_hash": plan_hash,
                     "status": "PLANNED",
+                    "expected_record_count": expected_record_count,
                 }
             )
             field_plan_hashes[module_api_name] = plan_hash
