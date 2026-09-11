@@ -1,47 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppState, useAppDispatch } from "../../state/AppContext";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
+import { getScanHistory } from "../../data/client";
 import useScanAnalytics from "../../hooks/useScanAnalytics";
+import { formatNumber } from "../../utils/format";
 import { cn } from "@/lib/utils";
 import { ContentContainer } from "../layout";
 import { Button } from "@/components/ui/button";
 import ModuleProgressList from "./ModuleProgressList";
+import {
+  STAGE,
+  STAGE_FLOW,
+  activeModuleFromStatus,
+  deriveModuleStage,
+  deriveScanStage,
+  moduleDisplayProgress,
+  progressFromStatus,
+} from "./scanStage";
 
-const STATUS_MESSAGE = {
-  CREATED: "Preparing the scan securely.",
-  AUTH_VALIDATING: "Confirming access to the connected CRM account.",
-  DISCOVERING: "Reviewing the selected modules.",
-  PLANNED: "Preparing the selected records for extraction.",
-  EXTRACTING: "Reading records from the connected CRM account.",
-  PROCESSING: "Checking the extracted records for quality issues.",
-  COMPLETED: "Finishing the report.",
-  PAUSED_RETRYABLE: "The scan is paused and can be continued safely.",
-  FAILED_TERMINAL: "The scan needs attention before it can continue.",
-};
-
-const AUTOMATION_MESSAGE = {
-  starting: "Starting the automatic scan.",
-  running: "Advancing the scan pipeline.",
-  completed: "Scan completed.",
-  stopped: "Automatic scanning is paused.",
-};
-
-function asCount(value) {
-  const count = Number(value);
-  return Number.isFinite(count) && count > 0 ? count : 0;
+function firstFailureDetail(status) {
+  for (const module of status?.modules ?? []) {
+    for (const task of module.tasks ?? []) {
+      if (task.controlledErrorCode) return String(task.controlledErrorCode);
+    }
+  }
+  return null;
 }
 
-function moduleExtractedCount(module) {
-  const fromJobs = (module?.bulkJobs ?? []).reduce(
-    (highest, job) => Math.max(highest, asCount(job.providerRecordCount)),
-    0
-  );
-  return Math.max(
-    asCount(module?.recordsDownloaded),
-    asCount(module?.recordsProcessed),
-    asCount(module?.expectedRecordCount),
-    fromJobs
-  );
+function ratioLabel(value, total) {
+  if (total > 0) return `${formatNumber(value)} / ${formatNumber(total)}`;
+  return formatNumber(value);
 }
 
 function LiveStat({ label, children }) {
@@ -53,22 +41,37 @@ function LiveStat({ label, children }) {
   );
 }
 
+function StageSteps({ stage }) {
+  const currentIndex = STAGE_FLOW.findIndex((item) => item.id === stage.id);
+  return (
+    <ol className="m-0 flex list-none flex-wrap gap-1 p-0" aria-label="Scan stages">
+      {STAGE_FLOW.map((item, index) => {
+        const isCurrent = item.id === stage.id;
+        const isPast = currentIndex >= 0 && index < currentIndex;
+        return (
+          <li
+            key={item.id}
+            className={cn(
+              "rounded-full px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.04em] uppercase leading-tight",
+              isCurrent && "bg-brand text-on-brand",
+              isPast && !isCurrent && "bg-strong-soft text-strong",
+              !isCurrent && !isPast && "bg-surface-sunken text-ink-muted"
+            )}
+            aria-current={isCurrent ? "step" : undefined}
+          >
+            {item.label}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export default function RunningScreen() {
   const { connection, scanConfig, scanId, scanContext } = useAppState();
   const dispatch = useAppDispatch();
-  const {
-    status,
-    results,
-    loading,
-    error,
-    refresh,
-    advance,
-    lastAdvance,
-    automationState,
-    automationMessage,
-  } = useScanAnalytics(scanId);
-  const progressHighWater = useRef({ scanId: null, modules: {} });
-  const extractedHighWater = useRef({ scanId: null, total: 0 });
+  const { status, results, loading, error, refresh, lastAdvance } =
+    useScanAnalytics(scanId);
   const countedAdvance = useRef(null);
   const [liveUsage, setLiveUsage] = useState({ credits: 0, throttleRetries: 0 });
 
@@ -88,86 +91,26 @@ export default function RunningScreen() {
     }));
   }, [lastAdvance]);
 
-  const moduleMetadata = new Map(
-    (connection?.accessibleModules ?? []).map((module) => [module.apiName, module])
-  );
-  const scopedModules = scanConfig.modules.map((apiName) => ({
-    apiName,
-    label: moduleMetadata.get(apiName)?.label || apiName,
-    recordCount: Number(moduleMetadata.get(apiName)?.recordCount) || 0,
-  }));
-  const progress = useMemo(() => {
-    if (progressHighWater.current.scanId !== scanId) {
-      progressHighWater.current = { scanId, modules: {} };
-    }
-    const nextProgress = {};
-    for (const module of status?.modules ?? []) {
-      const bulkCount = Math.max(
-        0,
-        ...(module.bulkJobs ?? []).map((job) => Number(job.providerRecordCount) || 0)
-      );
-      const expectedTotal = Number(module.expectedRecordCount) || bulkCount;
-      const scanned = Number(module.recordsProcessed) || 0;
-      const taskTypes = new Set(
-        (module.tasks ?? [])
-          .filter((task) => task.status === "SUCCEEDED")
-          .map((task) => task.taskType)
-      );
-      const bulkStatuses = new Set(
-        (module.bulkJobs ?? []).map((job) => String(job.status || ""))
-      );
-      let percent = 4;
-      let phase = "planning";
-      if (module.status === "COMPLETED") {
-        percent = 100;
-        phase = "done";
-      } else if (module.status === "PROCESSING" || taskTypes.has("PREPARE_BATCHES")) {
-        percent = expectedTotal
-          ? 35 + Math.round(Math.min(1, scanned / expectedTotal) * 60)
-          : 35;
-        phase = "classifying";
-      } else if (
-        module.status === "PROCESSING_PLANNED" ||
-        bulkStatuses.has("PROCESSING_PLANNED") ||
-        bulkStatuses.has("DOWNLOADED")
-      ) {
-        percent = 34;
-        phase = "preparing";
-      } else if (
-        bulkStatuses.has("READY_TO_DOWNLOAD") ||
-        bulkStatuses.has("DOWNLOAD_RETRYABLE")
-      ) {
-        percent = 30;
-        phase = "preparing";
-      } else if (
-        module.status === "EXTRACTING" ||
-        bulkStatuses.has("SUBMITTED") ||
-        bulkStatuses.has("PROCESSING")
-      ) {
-        percent = bulkStatuses.has("PROCESSING") ? 24 : 18;
-        phase = "extracting";
-      } else if (module.status === "PLANNED") {
-        percent = 10;
-        phase = "planning";
-      } else if (module.status === "DISCOVERING") {
-        percent = 6;
-        phase = "planning";
-      }
-      const priorPercent = Number(
-        progressHighWater.current.modules[module.moduleApiName]
-      ) || 0;
-      percent = module.status === "COMPLETED" ? 100 : Math.max(priorPercent, percent);
-      progressHighWater.current.modules[module.moduleApiName] = percent;
-      nextProgress[module.moduleApiName] = {
-        scanned,
-        estimatedTotal: expectedTotal,
-        percent,
-        phase,
-        indeterminate: false,
-      };
-    }
-    return nextProgress;
-  }, [scanId, status]);
+  const scopedModules = useMemo(() => {
+    const moduleMetadata = new Map(
+      (connection?.accessibleModules ?? []).map((module) => [module.apiName, module])
+    );
+    const fromStatus = (status?.modules ?? [])
+      .map((module) => module.moduleApiName)
+      .filter(Boolean);
+    const apiNames = fromStatus.length ? fromStatus : scanConfig.modules;
+    return apiNames.map((apiName) => ({
+      apiName,
+      label: moduleMetadata.get(apiName)?.label || apiName,
+    }));
+  }, [connection?.accessibleModules, scanConfig.modules, status?.modules]);
+
+  const stage = deriveScanStage(status);
+  const activeModuleRow = activeModuleFromStatus(status);
+  const activeModule = activeModuleRow?.moduleApiName ?? null;
+  const activeModuleLabel =
+    scopedModules.find((module) => module.apiName === activeModule)?.label ||
+    activeModule;
   const completedModules = useMemo(
     () =>
       (status?.modules ?? [])
@@ -175,45 +118,31 @@ export default function RunningScreen() {
         .map((module) => module.moduleApiName),
     [status]
   );
+  const totals = progressFromStatus(status);
   const plannedModuleCount = Math.max(
-    asCount(status?.plannedModuleCount),
-    scopedModules.length,
-    status?.modules?.length || 0
+    totals.plannedModules,
+    scopedModules.length
   );
-  const completedModuleCount = completedModules.length;
-  const activeModule = useMemo(() => {
-    const pendingModules = (status?.modules ?? []).filter(
-      (module) => module.status !== "COMPLETED"
-    );
-    return (
-      pendingModules.find((module) => module.status !== "PLANNED")
-        ?.moduleApiName ?? pendingModules[0]?.moduleApiName ?? null
-    );
-  }, [status]);
-  const allDone = plannedModuleCount > 0 && completedModuleCount === plannedModuleCount;
-  const recordsExtracted = useMemo(() => {
-    if (extractedHighWater.current.scanId !== scanId) {
-      extractedHighWater.current = { scanId, total: 0 };
+
+  const progress = useMemo(() => {
+    const nextProgress = {};
+    for (const module of status?.modules ?? []) {
+      const moduleStage = deriveModuleStage(module);
+      const done = module.status === "COMPLETED";
+      const isActive = !done && module.moduleApiName === activeModule;
+      const display = moduleDisplayProgress(module, { isActive, isDone: done });
+      nextProgress[module.moduleApiName] = {
+        scanned: display.scanned,
+        estimatedTotal: display.estimatedTotal,
+        batchesCompleted: Number(module.batchesCompleted) || 0,
+        batchesTotal: Number(module.batches?.total) || 0,
+        phase: moduleStage.id,
+        percent: display.percent,
+      };
     }
-    const fromStatus = (status?.modules ?? []).reduce(
-      (total, module) => total + moduleExtractedCount(module),
-      0
-    );
-    const fromResults = (results?.modules ?? []).reduce(
-      (total, module) => total + asCount(module.sourceRecordCount),
-      0
-    );
-    const nextTotal = Math.max(fromStatus, fromResults, extractedHighWater.current.total);
-    extractedHighWater.current.total = nextTotal;
-    return nextTotal;
-  }, [results, scanId, status]);
-  const friendlyStatusMessage =
-    STATUS_MESSAGE[status?.status] ?? "Advancing the scan pipeline.";
-  const visibleAutomationMessage = ["waiting-provider", "waiting-worker"].includes(
-    automationState
-  )
-    ? automationMessage
-    : AUTOMATION_MESSAGE[automationState] ?? "The scan is progressing.";
+    return nextProgress;
+  }, [activeModule, status]);
+
   const totalSourceRecords = useMemo(
     () =>
       (results?.modules ?? []).reduce(
@@ -224,20 +153,39 @@ export default function RunningScreen() {
   );
   const emptyResults =
     Boolean(results?.modules?.length) && totalSourceRecords === 0;
-  const isLive =
-    !allDone && automationState !== "stopped" && automationState !== "completed";
+  const isLive = stage.id !== STAGE.completed.id && stage.id !== STAGE.failed.id;
+  const canOpenReport = stage.id === STAGE.completed.id && results && !emptyResults;
+  const failureDetail = stage.id === STAGE.failed.id ? firstFailureDetail(status) : null;
 
   useEffect(() => {
-    if (results && !emptyResults) {
-      dispatch({
-        type: "scanComplete",
-        scan: {
-          ...adaptAnalyticsResults(results),
-          ...(scanContext ? { reportContext: scanContext } : {}),
-        },
-      });
-    }
-  }, [dispatch, emptyResults, results, scanContext]);
+    if (status?.status !== "COMPLETED") return undefined;
+    let cancelled = false;
+    getScanHistory()
+      .then((history) => {
+        if (!cancelled) {
+          dispatch({
+            type: "historyLoaded",
+            scanHistory: history?.scans ?? [],
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch, results, status?.status]);
+
+  function openReport() {
+    if (!results || !scanId) return;
+    dispatch({
+      type: "scanComplete",
+      scanId,
+      scan: {
+        ...adaptAnalyticsResults(results),
+        ...(scanContext ? { reportContext: scanContext } : {}),
+      },
+    });
+  }
 
   if (emptyResults) {
     const moduleNames = results.modules
@@ -271,91 +219,119 @@ export default function RunningScreen() {
 
   return (
     <ContentContainer className="flex min-h-full min-w-0 flex-col pt-6 pb-8 @min-[640px]:pt-8">
-      <div className="flex min-w-0 flex-col gap-6 @min-[640px]:flex-row @min-[640px]:items-end @min-[640px]:justify-between @min-[640px]:gap-10">
-        <div className="min-w-0 max-w-[40rem]">
-          <h1 className="flex items-center gap-2 font-heading text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            {isLive && (
-              <span
-                className="size-1.5 shrink-0 rounded-full bg-brand motion-safe:animate-pulse"
-                aria-hidden="true"
-              />
+      <section className="flex min-w-0 flex-col rounded-md border border-line bg-surface p-5 @min-[640px]:p-6">
+        <header className="flex min-w-0 flex-col gap-4 @min-[640px]:flex-row @min-[640px]:items-start @min-[640px]:justify-between @min-[640px]:gap-10">
+          <div className="min-w-0 max-w-[42rem]">
+            <p className="eyebrow mb-2">Worker status</p>
+            <h1 className="flex items-center gap-2 font-heading text-xl font-semibold tracking-tight text-ink sm:text-2xl">
+              {isLive && (
+                <span
+                  className="size-1.5 shrink-0 rounded-full bg-brand motion-safe:animate-pulse"
+                  aria-hidden="true"
+                />
+              )}
+              {stage.label}
+            </h1>
+            <p
+              className={cn(
+                "mt-2 mb-0 text-[13px]",
+                stage.id === STAGE.failed.id ? "text-risk" : "text-ink-soft"
+              )}
+              role="status"
+            >
+              {stage.description}
+              {isLive && activeModuleLabel ? ` Current module: ${activeModuleLabel}.` : ""}
+            </p>
+            {failureDetail && (
+              <p className="mt-2 mb-0 text-[13px] text-risk" role="alert">
+                {failureDetail}
+              </p>
             )}
-            {allDone ? "Wrapping up" : "Scanning"}
-          </h1>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="lg"
-            disabled={loading}
-            onClick={refresh}
-          >
-            {loading ? "Refreshing…" : "Refresh status"}
-          </Button>
-          {!allDone && (
+            {error && (
+              <p className="mt-2 mb-0 text-[13px] text-risk" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {canOpenReport && (
+              <Button type="button" size="lg" onClick={openReport}>
+                Open report
+              </Button>
+            )}
+            {(stage.id === STAGE.completed.id || stage.id === STAGE.failed.id) && (
+              <Button
+                type="button"
+                variant={canOpenReport ? "outline" : "default"}
+                size="lg"
+                onClick={() => dispatch({ type: "showHome" })}
+              >
+                Back to reports
+              </Button>
+            )}
             <Button
               type="button"
+              variant="outline"
               size="lg"
-              disabled={loading || automationState !== "stopped"}
-              onClick={advance}
+              disabled={loading}
+              onClick={refresh}
             >
-              {automationState === "stopped"
-                ? "Continue scan"
-                : "Automatic scan active"}
+              {loading ? "Refreshing…" : "Refresh status"}
             </Button>
-          )}
-        </div>
-      </div>
+          </div>
+        </header>
 
-      <p
-        className={cn(
-          "mt-4 text-[13px]",
-          automationState === "stopped" && "text-risk",
-          automationState === "completed" && "text-strong",
-          automationState !== "stopped" &&
-            automationState !== "completed" &&
-            "text-ink-soft"
+        {stage.id !== STAGE.failed.id && (
+          <div className="mt-5">
+            <StageSteps stage={stage} />
+          </div>
         )}
-        role="status"
-      >
-        {automationState === "stopped" || automationState === "completed"
-          ? visibleAutomationMessage
-          : friendlyStatusMessage}
-      </p>
-      {error && (
-        <p className="mt-2 text-[13px] text-risk" role="alert">
-          {error}
-        </p>
-      )}
 
-      <div
-        className="mt-8 grid grid-cols-2 gap-x-6 gap-y-5 border-y border-line py-5 @min-[640px]:grid-cols-4"
-        aria-label="Live scan progress"
-      >
-        <LiveStat label="Records extracted">
-          {recordsExtracted.toLocaleString("en-IN")}
-        </LiveStat>
-        <LiveStat label="Modules done">
-          {completedModuleCount}/{plannedModuleCount}
-        </LiveStat>
-        <LiveStat label="API credits used">
-          {liveUsage.credits.toLocaleString("en-IN")}
-        </LiveStat>
-        <LiveStat label="Throttle retries">
-          {liveUsage.throttleRetries.toLocaleString("en-IN")}
-        </LiveStat>
-      </div>
+        <div
+          className="mt-5 grid grid-cols-2 overflow-hidden rounded-md border border-line @min-[640px]:grid-cols-3"
+          aria-label="Live scan progress"
+        >
+          <div className="border-b border-line px-4 py-4 @min-[640px]:border-r @min-[640px]:border-b-0">
+            <LiveStat label="Modules completed">
+              {ratioLabel(totals.completedModules, plannedModuleCount)}
+            </LiveStat>
+          </div>
+          <div className="border-b border-line px-4 py-4 @min-[640px]:border-r @min-[640px]:border-b-0">
+            <LiveStat label="API credits used">
+              {liveUsage.credits.toLocaleString("en-IN")}
+            </LiveStat>
+          </div>
+          <div className="col-span-2 px-4 py-4 @min-[640px]:col-span-1">
+            <LiveStat label="Throttle retries">
+              {liveUsage.throttleRetries.toLocaleString("en-IN")}
+            </LiveStat>
+          </div>
+        </div>
 
-      <div className="mt-8 min-w-0">
-        <p className="eyebrow mb-4">Modules</p>
-        <ModuleProgressList
-          modules={scopedModules}
-          progress={progress}
-          completed={completedModules}
-          activeModule={activeModule}
-        />
-      </div>
+        <div className="mt-6 min-w-0">
+          <p className="eyebrow mb-4">Modules</p>
+          <ModuleProgressList
+            modules={scopedModules}
+            progress={progress}
+            completed={completedModules}
+            activeModule={activeModule}
+          />
+        </div>
+
+        {isLive && (
+          <div className="mt-6 flex justify-end border-t border-line pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="text-risk hover:bg-risk-soft hover:text-risk"
+              onClick={() => dispatch({ type: "reset" })}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+      </section>
     </ContentContainer>
   );
 }

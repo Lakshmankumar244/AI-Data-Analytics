@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppState, useActions } from "../../../state/AppContext";
 import * as api from "../../../data/client";
+import { summarizeModuleAnalytics } from "../../../data/analyticsAdapter";
 import { stateMeta } from "../../../utils/bands";
 import { formatNumber } from "../../../utils/format";
 import { groupOwnerAnalytics, recordOwnerQueryKeys } from "../../../data/ownerAnalytics";
@@ -8,7 +9,7 @@ import LoadingState from "../../shared/LoadingState";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-const SUPPORTED_STATES = new Set(["incomplete", "inaccurate"]);
+const SUPPORTED_STATES = new Set(["proper", "incomplete", "inaccurate"]);
 const RECORD_FILTERS = [
   { id: "proper", label: "Clean" },
   { id: "incomplete", label: "Missing information" },
@@ -135,7 +136,22 @@ export default function RecordsTab() {
     : null;
   const scanDepth = scan?.reportContext?.depth || scanConfig.depth || "quick";
   const listedCounts = data?.summary?.stateCounts;
-  const scanCleanCount = Number(scan?.stateBreakdown?.proper);
+  const scopedBreakdown = useMemo(() => {
+    if (!scan) return null;
+    if (!filterModules.length) return scan.stateBreakdown ?? null;
+    const selected = (scan.moduleAnalytics ?? []).filter((module) =>
+      filterModules.includes(module.moduleApiName)
+    );
+    return summarizeModuleAnalytics(selected).stateBreakdown;
+  }, [filterModules, scan]);
+  const scanCleanCount = Number(scopedBreakdown?.proper);
+
+  function countForState(stateId) {
+    if (SUPPORTED_STATES.has(stateId) && listedCounts) {
+      return Number(listedCounts[stateId] || 0);
+    }
+    return Number(scopedBreakdown?.[stateId] || 0);
+  }
 
   useEffect(() => {
     setPage(1);
@@ -181,7 +197,7 @@ export default function RecordsTab() {
   const emptyHint = useMemo(() => {
     if (activeState === "proper") {
       return Number.isFinite(scanCleanCount) && scanCleanCount > 0
-        ? `${formatNumber(scanCleanCount)} clean records were counted; they are not stored as a list.`
+        ? `${formatNumber(scanCleanCount)} clean records were counted; they could not be listed from the stored export.`
         : "Clean records are not listed.";
     }
     if (activeState && !SUPPORTED_STATES.has(activeState)) {
@@ -197,9 +213,10 @@ export default function RecordsTab() {
   }, [activeState, scanCleanCount, scanDepth]);
 
   const inScopeCount = activeState
-    ? Number(listedCounts?.[activeState] || 0)
+    ? countForState(activeState)
     : Number(listedCounts?.listedRecordCount ?? data?.summary?.storedSampleCount ?? 0);
   const showSampleNote =
+    activeState !== "proper" &&
     data?.summary?.measured &&
     Number(data.summary.affectedRecordCount) > Number(data.summary.storedSampleCount || 0);
   const heading = activeState
@@ -216,9 +233,8 @@ export default function RecordsTab() {
         {RECORD_FILTERS.map((state) => {
           const meta = stateMeta(state.id);
           const isActive = activeState === state.id;
-          const count = listedCounts
-            ? Number(listedCounts[state.id] || 0)
-            : null;
+          const count =
+            scopedBreakdown || listedCounts ? countForState(state.id) : null;
           return (
             <button
               key={state.id}

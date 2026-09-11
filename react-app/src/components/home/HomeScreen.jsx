@@ -1,11 +1,22 @@
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppState } from "../../state/AppContext";
 import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
-import { activateConnection, getScanHistory, getScanResults, ZOHO_CONSENT_URL } from "../../data/client";
-import { formatNumber, formatReportPeriod } from "../../utils/format";
+import { activateConnection, deleteScan, getScanHistory, getScanResults, ZOHO_CONSENT_URL } from "../../data/client";
+import { Trash2 } from "lucide-react";
+import { formatNumber, formatReportPeriod, formatScanTimestamp } from "../../utils/format";
 import { cn } from "@/lib/utils";
 import { ContentContainer, PageHeader } from "../layout";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Toast } from "@/components/ui/toast";
 import Band from "../shared/Band";
 import Dropdown from "../shared/Dropdown";
 import LoadingState from "../shared/LoadingState";
@@ -16,21 +27,6 @@ const COMPLETED_BAND = {
   color: "var(--strong)",
   soft: "var(--strong-soft)",
 };
-
-function readableDate(value) {
-  if (!value) return "—";
-  const normalized = String(value).replace(
-    /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})(?::\d{3})?/,
-    "$1T$2"
-  );
-  const date = new Date(normalized);
-  return Number.isNaN(date.getTime())
-    ? String(value)
-    : new Intl.DateTimeFormat("en-IN", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(date);
-}
 
 function statusLabel(status) {
   if (!status) return "Unknown";
@@ -103,23 +99,25 @@ function ScanStatus({ status }) {
 function ScanActions({
   scan,
   openingScanId,
+  deletingScanId,
   onOpen,
   onResume,
+  onDelete,
   size = "sm",
   emphasize = false,
 }) {
   const canOpen = canOpenScan(scan);
   const canResume = canResumeScan(scan);
-  if (!canOpen && !canResume) return null;
   const variant = emphasize ? "default" : "outline";
+  const busy = openingScanId === scan.scanId || deletingScanId === scan.scanId;
   return (
-    <>
+    <div className="flex flex-wrap items-center justify-end gap-2">
       {canOpen && (
         <Button
           type="button"
           variant={variant}
           size={size}
-          disabled={openingScanId === scan.scanId}
+          disabled={busy}
           onClick={() => onOpen(scan)}
         >
           {openingScanId === scan.scanId ? "Opening…" : "Open report"}
@@ -130,12 +128,24 @@ function ScanActions({
           type="button"
           variant={variant}
           size={size}
+          disabled={busy}
           onClick={() => onResume(scan)}
         >
           Resume
         </Button>
       )}
-    </>
+      {onDelete && (
+        <Button
+          type="button"
+          variant="outline"
+          size={size}
+          disabled={busy}
+          onClick={() => onDelete(scan)}
+        >
+          Delete
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -143,7 +153,10 @@ export default function HomeScreen() {
   const { connection, scanHistory, connectionNotice, historyNeedsRefresh } = useAppState();
   const dispatch = useAppDispatch();
   const [openingScanId, setOpeningScanId] = useState(null);
+  const [scanToDelete, setScanToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
   const [switchingConnection, setSwitchingConnection] = useState(false);
   const [historyConnectionId, setHistoryConnectionId] = useState("all");
 
@@ -166,7 +179,6 @@ export default function HomeScreen() {
         );
 
   useEffect(() => {
-    if (!historyNeedsRefresh) return undefined;
     let cancelled = false;
     getScanHistory()
       .then((history) => {
@@ -184,8 +196,15 @@ export default function HomeScreen() {
     };
   }, [dispatch, historyNeedsRefresh]);
 
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
   async function openReport(scan) {
     if (scan.status !== "COMPLETED" || !scan.hasResults) return;
+    if (!scanHistory.some((item) => item.scanId === scan.scanId)) return;
     setOpeningScanId(scan.scanId);
     setError(null);
     try {
@@ -204,6 +223,7 @@ export default function HomeScreen() {
   }
 
   function resumeScan(scan) {
+    if (!scanHistory.some((item) => item.scanId === scan.scanId)) return;
     dispatch({
       type: "scanStarted",
       scanId: scan.scanId,
@@ -219,6 +239,35 @@ export default function HomeScreen() {
         },
       },
     });
+  }
+
+  function requestDelete(scan) {
+    if (deleting) return;
+    setError(null);
+    setScanToDelete(scan);
+  }
+
+  async function confirmDelete() {
+    if (!scanToDelete?.scanId || deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteScan(scanToDelete.scanId);
+      const deletedScanId = scanToDelete.scanId;
+      dispatch({ type: "scanDeleted", scanId: deletedScanId });
+      setScanToDelete(null);
+      setOpeningScanId((current) => (current === deletedScanId ? null : current));
+      setToast({
+        id: Date.now(),
+        message: "The scan report was deleted.",
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "The scan report could not be deleted"
+      );
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function selectConnection(connectionId) {
@@ -257,6 +306,7 @@ export default function HomeScreen() {
     latestScan && (canOpenScan(latestScan) || canResumeScan(latestScan));
 
   return (
+    <>
     <ContentContainer className="pb-10 pt-6 @min-[640px]:pt-8">
       {connection ? (
         <div className="mb-8 flex min-w-0 flex-wrap items-end justify-end gap-x-3 gap-y-2">
@@ -342,7 +392,7 @@ export default function HomeScreen() {
                     <ScanStatus status={latestScan.status} />
                   </div>
                   <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-                    {readableDate(latestScan.completedAt || latestScan.createdAt)}
+                    {formatScanTimestamp(latestScan.createdAt)}
                     {latestPeriod ? ` · ${latestPeriod}` : ""}
                     {latestClock ? ` · ${latestClock}` : ""}
                   </p>
@@ -351,8 +401,10 @@ export default function HomeScreen() {
                   <ScanActions
                     scan={latestScan}
                     openingScanId={openingScanId}
+                    deletingScanId={deleting ? scanToDelete?.scanId : null}
                     onOpen={openReport}
                     onResume={resumeScan}
+                    onDelete={requestDelete}
                     size="lg"
                     emphasize
                   />
@@ -414,7 +466,7 @@ export default function HomeScreen() {
           </p>
         ) : (
           <div className="min-w-0 overflow-x-auto overscroll-x-contain">
-            <table className="w-full min-w-[720px] border-collapse text-[13px]">
+            <table className="w-full min-w-[752px] border-collapse text-[13px]">
               <thead>
                 <tr>
                   {["Zoho account", "Email", "Modules", "Records", "Created", "Status", "Action"].map(
@@ -427,21 +479,24 @@ export default function HomeScreen() {
                       </th>
                     )
                   )}
+                  <th className="w-9 px-1 py-1.5 text-center">
+                    <span className="sr-only">Delete</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {visibleScans.map((scan) => {
-                  const canOpen = scan.status === "COMPLETED" && scan.hasResults;
-                  const canResume = !["COMPLETED", "FAILED_TERMINAL"].includes(scan.status);
                   const accountName =
                     scan.connection?.organizationName ||
                     scan.connection?.name ||
                     "Unknown account";
                   const accountEmail = scan.connection?.email || "—";
+                  const isDeletingRow =
+                    deleting && scanToDelete?.scanId === scan.scanId;
                   return (
                     <tr
                       key={scan.scanId}
-                      className="border-t border-line hover:bg-surface-sunken"
+                      className="group/scan border-t border-line hover:bg-surface-sunken"
                     >
                       <td className="px-2.5 py-1.5 align-middle">
                         <span className="font-semibold text-ink">{accountName}</span>
@@ -456,33 +511,40 @@ export default function HomeScreen() {
                         {formatNumber(scan.recordCount)}
                       </td>
                       <td className="px-2.5 py-1.5 align-middle whitespace-nowrap text-ink-soft">
-                        {readableDate(scan.createdAt)}
+                        {formatScanTimestamp(scan.createdAt)}
                       </td>
                       <td className="px-2.5 py-1.5 align-middle">
                         <ScanStatus status={scan.status} />
                       </td>
                       <td className="px-2.5 py-1.5 text-right align-middle whitespace-nowrap">
-                        {canOpen && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={openingScanId === scan.scanId}
-                            onClick={() => openReport(scan)}
+                        <ScanActions
+                          scan={scan}
+                          openingScanId={openingScanId}
+                          deletingScanId={deleting ? scanToDelete?.scanId : null}
+                          onOpen={openReport}
+                          onResume={resumeScan}
+                        />
+                      </td>
+                      <td className="w-9 px-1 py-1.5 text-center align-middle">
+                        <button
+                          type="button"
+                          aria-label="Delete report"
+                          disabled={isDeletingRow}
+                          onClick={() => requestDelete(scan)}
+                          className={cn(
+                            "group/delete relative inline-flex size-7 items-center justify-center rounded-md text-risk opacity-0 transition-opacity hover:bg-risk-soft focus-visible:opacity-100 group-hover/scan:opacity-100",
+                            "pointer-events-none group-hover/scan:pointer-events-auto focus-visible:pointer-events-auto",
+                            isDeletingRow && "pointer-events-auto opacity-100"
+                          )}
+                        >
+                          <Trash2 className="size-3.5" aria-hidden="true" />
+                          <span
+                            role="tooltip"
+                            className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 rounded-md bg-ink px-2 py-1 text-[11px] font-medium whitespace-nowrap text-on-brand opacity-0 shadow-sm transition-opacity group-hover/delete:opacity-100 group-focus-visible/delete:opacity-100"
                           >
-                            {openingScanId === scan.scanId ? "Opening…" : "Open report"}
-                          </Button>
-                        )}
-                        {canResume && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => resumeScan(scan)}
-                          >
-                            Resume
-                          </Button>
-                        )}
+                            Delete report
+                          </span>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -492,6 +554,41 @@ export default function HomeScreen() {
           </div>
         )}
       </section>
+
+      <AlertDialog
+        open={Boolean(scanToDelete)}
+        onOpenChange={(open) => {
+          if (deleting) return;
+          if (!open) setScanToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete scan report?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the report and stored results for this
+              scan. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button type="button" variant="outline" disabled={deleting}>
+                Cancel
+              </Button>
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleting}
+              onClick={confirmDelete}
+            >
+              {deleting ? "Deleting…" : "Delete report"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ContentContainer>
+    <Toast open={Boolean(toast)}>{toast?.message}</Toast>
+    </>
   );
 }

@@ -21,7 +21,7 @@ function contextFor(phase, tab) {
     case "setup":
       return { kicker: "Scan", title: "Configure scan" };
     case "running":
-      return { kicker: "Scan", title: "Scan in progress" };
+      return { kicker: "Scan", title: "Scan status" };
     case "report":
       return { kicker: "Report", title: TAB_LABELS[tab] || "Overview" };
     case "error":

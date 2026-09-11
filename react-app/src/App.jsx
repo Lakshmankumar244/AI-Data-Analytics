@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AppProvider, useAppState, useAppDispatch } from "./state/AppContext";
 import * as api from "./data/client";
 import { AppShell as Shell, ContentContainer, MainContent } from "./components/layout";
@@ -8,10 +8,19 @@ import RunningScreen from "./components/running/RunningScreen";
 import ReportShell from "./components/report/ReportShell";
 import HomeScreen from "./components/home/HomeScreen";
 import LoadingState from "./components/shared/LoadingState";
+import {
+  dispatchResolved,
+  navigateTo,
+  parseLocation,
+  resolveRoute,
+  routeFromState,
+} from "./navigation";
 
 function AppShell() {
   const state = useAppState();
   const dispatch = useAppDispatch();
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     let cancelled = false;
@@ -46,18 +55,30 @@ function AppShell() {
       try {
         const connection = await api.getConnection();
         const history = await api.getScanHistory();
-        if (!cancelled) {
-          dispatch({
-            type: "sessionLoaded",
-            connection,
-            scanHistory: history?.scans ?? [],
-            notice:
-              notice ||
-              (connection?.legacyMigrated
-                ? "Your previous development reports were migrated to this Catalyst account."
-                : null),
-          });
+        const scans = history?.scans ?? [];
+        let resolved;
+        try {
+          resolved = await resolveRoute(parseLocation(), scans);
+        } catch (routeErr) {
+          if (routeErr?.status === 401 || routeErr?.status === 403) throw routeErr;
+          if (routeErr?.status === 404) {
+            resolved = { phase: "home", urlRoute: { name: "home" } };
+          } else {
+            throw routeErr;
+          }
         }
+        if (cancelled) return;
+        if (resolved.urlRoute) navigateTo(resolved.urlRoute, { replace: true });
+        dispatchResolved(dispatch, resolved, {
+          session: true,
+          connection,
+          scans,
+          notice:
+            notice ||
+            (connection?.legacyMigrated
+              ? "Your previous development reports were migrated to this Catalyst account."
+              : null),
+        });
       } catch (err) {
         if (cancelled) return;
         if (err?.status === 401 || err?.status === 403) {
@@ -73,6 +94,42 @@ function AppShell() {
       cancelled = true;
     };
   }, [dispatch]);
+
+  useEffect(() => {
+    let generation = 0;
+    async function onPopState() {
+      const gen = ++generation;
+      try {
+        const resolved = await resolveRoute(
+          parseLocation(),
+          stateRef.current.scanHistory ?? []
+        );
+        if (gen !== generation) return;
+        if (resolved.urlRoute) navigateTo(resolved.urlRoute, { replace: true });
+        dispatchResolved(dispatch, resolved);
+      } catch (err) {
+        if (gen !== generation) return;
+        if (err?.status === 401 || err?.status === 403) {
+          window.location.assign(`${window.location.origin}/__catalyst/auth/login`);
+          return;
+        }
+        if (err?.status === 404) {
+          navigateTo({ name: "home" }, { replace: true });
+          dispatch({ type: "showHome" });
+          return;
+        }
+        dispatch({ type: "error", message: err.message });
+      }
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (state.phase === "boot" || state.phase === "error") return;
+    const route = routeFromState(state.phase, state.scanId);
+    if (route) navigateTo(route);
+  }, [state.phase, state.scanId]);
 
   return (
     <Shell>

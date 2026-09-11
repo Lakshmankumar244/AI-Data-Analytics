@@ -6,6 +6,7 @@ from datetime import datetime
 
 import zcatalyst_sdk
 
+from analytics.record_export import list_clean_records
 from analytics.repository import find_analytics_results, find_owned_scan
 from common.core import (
     AuthenticationRequired,
@@ -24,7 +25,8 @@ FINDING_IDS_PER_ISSUE_QUERY = 8
 SUPPORTED_RECORD_FINDING_SCHEMAS = frozenset(
     {"record-findings-v1", "record-findings-v2", "record-findings-v3", "record-findings-v4"}
 )
-LISTABLE_STATES = ("incomplete", "inaccurate")
+LISTABLE_STATES = ("incomplete", "inaccurate", "proper")
+FLAGGED_STATES = frozenset({"incomplete", "inaccurate"})
 UNNAMED_RECORD = "Unnamed record"
 
 
@@ -84,6 +86,7 @@ def _finding_summary(result_rows, selected_modules):
         "storedSampleCount": 0,
         "sampleLimit": 0,
         "schemaVersion": None,
+        "stateCounts": _empty_listed_states(),
     }
     selected = set(selected_modules)
     candidates = []
@@ -121,6 +124,14 @@ def _finding_summary(result_rows, selected_modules):
             "sampleLimit",
         ):
             summary[key] += _integer(payload.get(key))
+        stored_states = payload.get("stateCounts")
+        if isinstance(stored_states, dict):
+            for state, count in summary["stateCounts"].items():
+                if state == "listedRecordCount":
+                    continue
+                summary["stateCounts"][state] = count + _integer(
+                    stored_states.get(state)
+                )
     return summary
 
 
@@ -365,7 +376,7 @@ def get_record_findings(request, datastore, scan_id):
         summary = _finding_summary(
             find_analytics_results(zcql, scan_row["ROWID"]), modules
         )
-        summary["stateCounts"] = _empty_listed_states()
+        aggregate_counts = dict(summary.get("stateCounts") or _empty_listed_states())
 
         schema_version = summary.get("schemaVersion")
         if not summary["measured"] or not schema_version:
@@ -376,10 +387,42 @@ def get_record_findings(request, datastore, scan_id):
         scope_conditions = _finding_scope_conditions(
             scan_row, schema_version, modules, owners
         )
-        summary["stateCounts"] = _listed_state_counts(zcql, scope_conditions)
+        listed_counts = _listed_state_counts(zcql, scope_conditions)
+        listed_counts["proper"] = _integer(aggregate_counts.get("proper"))
+        listed_counts["suspicious"] = _integer(aggregate_counts.get("suspicious"))
+        listed_counts["suspected_duplicate"] = _integer(
+            aggregate_counts.get("suspected_duplicate")
+        )
+        listed_counts["confirmed_duplicate"] = _integer(
+            aggregate_counts.get("confirmed_duplicate")
+        )
+        summary["stateCounts"] = listed_counts
         if states and not supported_states:
             return json_response(
                 _records_payload(scan_id, page, summary, []),
+            )
+
+        search = str(request.args.get("q") or "").strip()
+        if "proper" in supported_states and not (supported_states & FLAGGED_STATES):
+            records = list_clean_records(
+                zcql,
+                scan_row,
+                modules,
+                owners,
+                _owner_names(zcql, scan_row),
+            )
+            if search:
+                needle = search.casefold()
+                records = [
+                    record
+                    for record in records
+                    if needle in _record_search_text(record)
+                ]
+            start = (page - 1) * PAGE_SIZE
+            has_more = len(records) > start + PAGE_SIZE
+            records = records[start : start + PAGE_SIZE]
+            return json_response(
+                _records_payload(scan_id, page, summary, records, has_more)
             )
 
         conditions = list(scope_conditions)
@@ -391,7 +434,6 @@ def get_record_findings(request, datastore, scan_id):
         if state_conditions:
             conditions.append("(" + " or ".join(state_conditions) + ")")
 
-        search = str(request.args.get("q") or "").strip()
         offset = 0 if search else (page - 1) * PAGE_SIZE
         fetch_limit = 301 if search else PAGE_SIZE + 1
         finding_query_suffix = (

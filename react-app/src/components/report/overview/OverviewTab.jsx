@@ -123,6 +123,11 @@ export default function OverviewTab() {
     setTab("modules");
   }
 
+  function openRecordState(stateId) {
+    if (stateId) setFilter({ focusState: stateId });
+    setTab("records");
+  }
+
   return (
     <div className="flex min-w-0 flex-col gap-5 py-6 pb-10 @max-[760px]:py-4 @max-[760px]:pb-8">
       <div className="grid min-w-0 grid-cols-1 items-stretch gap-5 @min-[900px]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
@@ -146,6 +151,8 @@ export default function OverviewTab() {
             cleanShare={shareOf(cleanRecords, recordsInScope)}
             attentionShare={shareOf(attentionRecords, recordsInScope)}
             usersNeedingHelp={usersNeedingHelp}
+            onOpenClean={() => openRecordState("proper")}
+            onOpenSuspicious={() => openRecordState("suspicious")}
             onOpenUsers={() => setTab("users")}
           />
         </div>
@@ -182,10 +189,7 @@ export default function OverviewTab() {
             <StateBreakdown
               breakdown={stateBreakdown}
               focusState={focusState}
-              onFocus={(id) => {
-                if (id) setFilter({ focusState: id });
-                setTab("records");
-              }}
+              onFocus={openRecordState}
             />
           ) : (
             <OverviewEmptyNote>

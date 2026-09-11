@@ -29,15 +29,18 @@ export function reducer(state, action) {
       return {
         ...state,
         // Session restore waits for getConnection() in App.jsx (boot phase)
-        // before this action fires. Authenticated landing is Configure scan.
-        // Reports remains available through showHome / the sidebar.
-        phase: "setup",
+        // before this action fires. URL restore may land on setup, home,
+        // running, or report instead of always Configure scan.
+        phase: action.phase ?? "setup",
         connection: action.connection,
         scanConfig: scanConfigForConnection(state.scanConfig, action.connection),
         scanHistory,
         historyNeedsRefresh: false,
         connectionNotice: action.notice ?? null,
         errorMessage: null,
+        scanId: action.scanId ?? null,
+        scan: action.scan ?? null,
+        scanContext: action.scanContext ?? null,
       };
     }
 
@@ -55,6 +58,25 @@ export function reducer(state, action) {
         scanHistory: action.scanHistory ?? [],
         historyNeedsRefresh: false,
       };
+
+    case "scanDeleted": {
+      const deletedId = action.scanId;
+      const scanHistory = state.scanHistory.filter(
+        (scan) => scan.scanId !== deletedId
+      );
+      const deletedIsCurrent =
+        state.scanId === deletedId ||
+        state.scan?.scanId === deletedId ||
+        state.scan?.reportContext?.scanId === deletedId ||
+        state.scanContext?.scanId === deletedId;
+      return {
+        ...state,
+        scanHistory,
+        ...(deletedIsCurrent
+          ? { scanId: null, scan: null, scanContext: null }
+          : {}),
+      };
+    }
 
     // Soft outcome: the user backed out of Zoho's consent screen, or the
     // backend otherwise didn't complete the connection. Not a hard error -
@@ -127,6 +149,7 @@ export function reducer(state, action) {
         scan: null,
         filterModules: [],
         filterUsers: [],
+        historyNeedsRefresh: true,
       };
 
     case "showSetup":

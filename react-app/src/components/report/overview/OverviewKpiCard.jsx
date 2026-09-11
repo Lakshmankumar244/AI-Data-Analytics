@@ -25,16 +25,32 @@ export default function OverviewKpiCard({
   detail,
   tone = "neutral",
   action,
+  onOpen,
   unavailableLabel = "Not measured",
 }) {
   const unavailable = value === null || value === undefined;
+  const clickable = Boolean(onOpen) && !unavailable;
 
   return (
     <article
       className={cn(
         "flex h-full min-w-0 flex-col gap-1 rounded-md px-4 py-4",
-        unavailable ? "bg-surface-sunken" : TILE[tone]
+        unavailable ? "bg-surface-sunken" : TILE[tone],
+        clickable && "cursor-pointer"
       )}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? onOpen : undefined}
+      onKeyDown={
+        clickable
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen();
+              }
+            }
+          : undefined
+      }
     >
       <p className="eyebrow text-ink-muted">{label}</p>
       <strong

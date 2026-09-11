@@ -168,7 +168,7 @@ export function AppSidebar({
             {phase === "running" && (
               <SidebarItem
                 icon={Activity}
-                label="Scanning"
+                label="Scan status"
                 current
                 disabled
               />

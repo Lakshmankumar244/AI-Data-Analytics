@@ -2,6 +2,7 @@
 
 import json
 import logging
+from datetime import datetime, timezone
 
 import zcatalyst_sdk
 
@@ -11,135 +12,19 @@ from bulk_read.status import refresh_bulk_read_status
 from bulk_read.submit import submit_bulk_read_job
 from common.core import (
     AuthenticationRequired,
-    foreign_row_id,
+    from_catalyst_datetime,
     get_current_user_id,
     json_response,
 )
+from common.profiler import profile_stage
+from orchestration.choose import choose_action, orchestrate_owns_scan
 from orchestration.repository import load_scan_state
+from pipeline.orchestrate_enqueue import enqueue_orchestrate_scan
 from pipeline.task_routes import enqueue_prepare_batches, enqueue_process_batches
-from scans.routes import discover_scan
+from scans.discover import discover_scan
 
 
 LOGGER = logging.getLogger(__name__)
-ACTIVE_TASK_STATES = {"QUEUED", "RUNNING"}
-
-
-def _latest_task(state, bulk_row, task_type):
-    matches = [
-        task
-        for task in state["tasks"]
-        if str(foreign_row_id(task.get("bulk_job_row_id"))) == str(bulk_row["ROWID"])
-        and task.get("task_type") == task_type
-    ]
-    return max(matches, key=lambda row: int(row.get("ROWID") or 0), default=None)
-
-
-def choose_action(state):
-    """Return the next deterministic action without changing any state."""
-    scan_status = str(state["scan"].get("status") or "")
-    if scan_status == "COMPLETED":
-        return {"name": "COMPLETE", "next": None}
-    if scan_status == "FAILED_TERMINAL":
-        return {"name": "BLOCKED", "next": "REVIEW_FAILURE"}
-    if scan_status in {"CREATED", "DISCOVERING", "PAUSED_RETRYABLE"}:
-        return {"name": "DISCOVER", "next": "PREPARE_BULK"}
-
-    modules = sorted(
-        state["modules"], key=lambda row: str(row.get("module_api_name") or "")
-    )
-    if not modules:
-        return {"name": "BLOCKED", "next": "REVIEW_SCAN_PLAN"}
-
-    all_jobs = [
-        job
-        for module in modules
-        for job in state["bulk_jobs_by_module"].get(str(module["ROWID"]), [])
-    ]
-    if not all_jobs:
-        return {"name": "PREPARE_BULK", "next": "SUBMIT_BULK"}
-
-    for module in modules:
-        jobs = sorted(
-            state["bulk_jobs_by_module"].get(str(module["ROWID"]), []),
-            key=lambda row: (
-                int(row.get("provider_page") or 0),
-                str(row.get("bulk_job_id") or ""),
-            ),
-        )
-        if not jobs:
-            return {"name": "BLOCKED", "next": "REVIEW_BULK_PLAN"}
-        for bulk in jobs:
-            status = str(bulk.get("status") or "")
-            target = {"bulk": bulk, "module": module}
-            if status == "PLANNED":
-                return {
-                    "name": "SUBMIT_BULK",
-                    "next": "CHECK_BULK_STATUS",
-                    **target,
-                }
-            if status == "SUBMITTED" or (
-                status == "PROCESSING" and not bulk.get("source_file_id")
-            ):
-                return {
-                    "name": "CHECK_BULK_STATUS",
-                    "next": "CHECK_BULK_STATUS",
-                    **target,
-                }
-            if status in {"READY_TO_DOWNLOAD", "DOWNLOAD_RETRYABLE"}:
-                return {
-                    "name": "DOWNLOAD_RESULT",
-                    "next": "PREPARE_BATCHES",
-                    **target,
-                }
-            if status == "DOWNLOADED":
-                task = _latest_task(state, bulk, "PREPARE_BATCHES")
-                if task and task.get("status") in ACTIVE_TASK_STATES:
-                    return {
-                        "name": "WAIT_FOR_WORKER",
-                        "next": "PREPARE_BATCHES",
-                        "task": task,
-                        **target,
-                    }
-                if task and task.get("status") == "OUTCOME_UNKNOWN":
-                    return {
-                        "name": "BLOCKED",
-                        "next": "REVIEW_WORKER_JOB",
-                        "task": task,
-                        **target,
-                    }
-                return {
-                    "name": "PREPARE_BATCHES",
-                    "next": "PROCESS_BATCHES",
-                    **target,
-                }
-            if status in {"PROCESSING_PLANNED", "PROCESSING"} and bulk.get(
-                "source_file_id"
-            ):
-                task = _latest_task(state, bulk, "PROCESS_BATCHES")
-                if task and task.get("status") in ACTIVE_TASK_STATES:
-                    return {
-                        "name": "WAIT_FOR_WORKER",
-                        "next": "PROCESS_BATCHES",
-                        "task": task,
-                        **target,
-                    }
-                if task and task.get("status") == "OUTCOME_UNKNOWN":
-                    return {
-                        "name": "BLOCKED",
-                        "next": "REVIEW_WORKER_JOB",
-                        "task": task,
-                        **target,
-                    }
-                return {
-                    "name": "PROCESS_BATCHES",
-                    "next": "WAIT_FOR_WORKER",
-                    **target,
-                }
-            if status == "PROCESSED":
-                continue
-            return {"name": "BLOCKED", "next": "REVIEW_BULK_JOB", **target}
-
-    return {"name": "WAIT_FOR_COMPLETION", "next": "REFRESH_STATUS"}
 
 
 def _response_body(response):
@@ -174,12 +59,78 @@ def _execute(action, request, datastore, scan_id):
     return handlers[name](request, datastore, scan_id, bulk_job_id)
 
 
-def advance_scan(request, datastore, scan_id):
-    """Perform no more than one action, then report the newly durable state."""
+def _retry_after_seconds(action):
+    bulk = action.get("bulk") or {}
+    next_retry_value = bulk.get("next_retry_at")
+    if not next_retry_value:
+        return None
     try:
-        zcql = zcatalyst_sdk.initialize().zcql()
+        retry_at = from_catalyst_datetime(next_retry_value)
+        remaining = int((retry_at - datetime.now(timezone.utc)).total_seconds())
+        return max(1, remaining) if remaining > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _status_payload(scan_id, state, action, *, worker_owned, blocked=False, extra=None):
+    task = action.get("task") or {}
+    bulk = action.get("bulk") or {}
+    payload = {
+        "scanId": scan_id,
+        "currentStatus": state["scan"].get("status"),
+        "operationPerformed": "NONE",
+        "nextAction": action.get("name") or action.get("next"),
+        "waitingForProvider": action.get("name")
+        in {
+            "CHECK_BULK_STATUS",
+            "WAIT_FOR_WORKER",
+            "WAIT_FOR_COMPLETION",
+        },
+        "blocked": blocked,
+        "workerOwned": worker_owned,
+        "orchestrationOwner": "WORKER" if worker_owned else "HTTP",
+        "bulkJobId": bulk.get("bulk_job_id"),
+        "bulkJobStatus": bulk.get("status"),
+        "taskId": task.get("task_id"),
+        "taskStatus": task.get("status"),
+        "retryAfterSeconds": _retry_after_seconds(action),
+        "zohoApiCalls": 0,
+        "zohoCreditsConsumed": 0,
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def _log_advance_blocked(scan_id, state, action, task, reason):
+    LOGGER.info(
+        "SCAN_PROFILE %s",
+        json.dumps(
+            {
+                "scope": "ORCHESTRATE_SCAN",
+                "stage": "advance_blocked",
+                "scanId": scan_id,
+                "reason": reason,
+                "actionSelected": action.get("name"),
+                "nextAction": action.get("next"),
+                "currentStatus": state["scan"].get("status"),
+                "orchestrateTaskId": (task or {}).get("task_id"),
+                "orchestrateTaskStatus": (task or {}).get("status"),
+                "bulkJobId": (action.get("bulk") or {}).get("bulk_job_id"),
+            },
+            default=str,
+        ),
+    )
+
+
+def advance_scan(request, datastore, scan_id):
+    """Report status while ORCHESTRATE_SCAN owns the scan; otherwise recover."""
+    try:
+        app = zcatalyst_sdk.initialize()
+        zcql = app.zcql()
         user_id = get_current_user_id(request)
-        state = load_scan_state(zcql, scan_id, user_id)
+        with profile_stage("orchestration", "load_scan_state", scanId=scan_id):
+            state = load_scan_state(zcql, scan_id, user_id)
         if not state:
             return json_response(
                 {"error": {"code": "SCAN_NOT_FOUND", "message": "Scan was not found"}},
@@ -187,33 +138,121 @@ def advance_scan(request, datastore, scan_id):
             )
 
         action = choose_action(state)
+        owned, orchestrate_task = orchestrate_owns_scan(state)
+        if owned:
+            _log_advance_blocked(
+                scan_id, state, action, orchestrate_task, "worker_owned"
+            )
+            blocked = action["name"] == "BLOCKED"
+            return json_response(
+                _status_payload(
+                    scan_id, state, action, worker_owned=True, blocked=blocked
+                )
+            )
+
+        if str(state["scan"].get("status") or "") != "COMPLETED":
+            enqueue_result = enqueue_orchestrate_scan(app, datastore, state["scan"])
+            if enqueue_result.get("ok"):
+                LOGGER.info(
+                    "SCAN_PROFILE %s",
+                    json.dumps(
+                        {
+                            "scope": "ORCHESTRATE_SCAN",
+                            "stage": "advance_enqueued",
+                            "scanId": scan_id,
+                            "alreadyActive": enqueue_result.get("alreadyActive"),
+                            "submitted": enqueue_result.get("submitted"),
+                            "taskId": (enqueue_result.get("task") or {}).get("task_id"),
+                        },
+                        default=str,
+                    ),
+                )
+                refreshed = load_scan_state(zcql, scan_id, user_id) or state
+                following = choose_action(refreshed)
+                _log_advance_blocked(
+                    scan_id,
+                    refreshed,
+                    following,
+                    enqueue_result.get("task"),
+                    "handed_to_worker",
+                )
+                return json_response(
+                    _status_payload(
+                        scan_id,
+                        refreshed,
+                        following,
+                        worker_owned=True,
+                        extra={
+                            "taskId": (enqueue_result.get("task") or {}).get("task_id"),
+                            "taskStatus": (enqueue_result.get("task") or {}).get(
+                                "status"
+                            ),
+                        },
+                    )
+                )
+            if enqueue_result.get("code") == "WORKER_ENQUEUE_OUTCOME_UNKNOWN":
+                _log_advance_blocked(
+                    scan_id,
+                    state,
+                    {"name": "BLOCKED", "next": "REVIEW_WORKER_JOB"},
+                    enqueue_result.get("task"),
+                    "orchestrate_outcome_unknown",
+                )
+                return json_response(
+                    {
+                        "error": {
+                            "code": "WORKER_ENQUEUE_OUTCOME_UNKNOWN",
+                            "message": "Inspect the Job Pool before retrying this task",
+                        },
+                        "taskId": (enqueue_result.get("task") or {}).get("task_id"),
+                        "nextAction": "REVIEW_WORKER_JOB",
+                        "workerOwned": False,
+                    },
+                    409,
+                )
+
         passive = {"COMPLETE", "WAIT_FOR_WORKER", "WAIT_FOR_COMPLETION", "BLOCKED"}
         if action["name"] in passive:
             task = action.get("task") or {}
             bulk = action.get("bulk") or {}
             blocked = action["name"] == "BLOCKED"
+            LOGGER.info(
+                "SCAN_PROFILE %s",
+                json.dumps(
+                    {
+                        "scope": "orchestration",
+                        "stage": action["name"],
+                        "scanId": scan_id,
+                        "currentStatus": state["scan"].get("status"),
+                        "nextAction": action.get("next"),
+                        "bulkJobId": bulk.get("bulk_job_id"),
+                        "bulkJobStatus": bulk.get("status"),
+                        "taskId": task.get("task_id"),
+                        "taskStatus": task.get("status"),
+                        "taskAttemptCount": task.get("attempt_count"),
+                        "waiting": True,
+                        "workerOwned": False,
+                    },
+                    default=str,
+                ),
+            )
             return json_response(
-                {
-                    "scanId": scan_id,
-                    "currentStatus": state["scan"].get("status"),
-                    "operationPerformed": "NONE",
-                    "nextAction": action.get("next"),
-                    "waitingForProvider": action["name"]
-                    in {"WAIT_FOR_WORKER", "WAIT_FOR_COMPLETION"},
-                    "blocked": blocked,
-                    "bulkJobId": bulk.get("bulk_job_id"),
-                    "bulkJobStatus": bulk.get("status"),
-                    "taskId": task.get("task_id"),
-                    "taskStatus": task.get("status"),
-                    "zohoApiCalls": 0,
-                    "zohoCreditsConsumed": 0,
-                },
+                _status_payload(
+                    scan_id, state, action, worker_owned=False, blocked=blocked
+                ),
                 409
                 if blocked
                 else (202 if action["name"] == "WAIT_FOR_WORKER" else 200),
             )
 
-        delegated = _execute(action, request, datastore, scan_id)
+        with profile_stage(
+            "orchestration",
+            action["name"],
+            scanId=scan_id,
+            currentStatus=state["scan"].get("status"),
+            bulkJobId=(action.get("bulk") or {}).get("bulk_job_id"),
+        ):
+            delegated = _execute(action, request, datastore, scan_id)
         body = _response_body(delegated)
         if delegated.status_code == 429 and body.get("pollingDeferred"):
             return json_response(
@@ -224,6 +263,7 @@ def advance_scan(request, datastore, scan_id):
                     "nextAction": "CHECK_BULK_STATUS",
                     "waitingForProvider": True,
                     "pollingDeferred": True,
+                    "workerOwned": False,
                     "retryAfterSeconds": int(body.get("retryAfterSeconds") or 60),
                     "bulkJobId": body.get("bulkJobId"),
                     "zohoApiCalls": 0,
@@ -246,6 +286,7 @@ def advance_scan(request, datastore, scan_id):
                 "nextAction": following.get("name") or following.get("next"),
                 "waitingForProvider": following.get("name")
                 in {"CHECK_BULK_STATUS", "WAIT_FOR_WORKER", "WAIT_FOR_COMPLETION"},
+                "workerOwned": False,
                 "bulkJobId": body.get("bulkJobId"),
                 "taskId": body.get("taskId"),
                 "taskStatus": body.get("taskStatus"),

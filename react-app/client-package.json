@@ -1,6 +1,7 @@
 {
     "name": "react-app",
-    "version": "0.0.1",
+    "version": "0.0.4",
     "homepage": "/__catalyst/auth/login",
-    "login_redirect": "index.html"
+    "login_redirect": "index.html",
+    "404": "index.html"
 }

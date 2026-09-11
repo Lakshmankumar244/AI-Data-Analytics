@@ -24,7 +24,7 @@ def build_status(scan_row, module_rows, bulk_jobs_by_module, batches_by_bulk, ta
 
     modules = []
     for module_row in sorted(
-        module_rows, key=lambda row: str(row.get("module_api_name") or "")
+        module_rows, key=lambda row: int(row.get("ROWID") or 0)
     ):
         module_row_id = str(module_row["ROWID"])
         bulk_jobs = bulk_jobs_by_module.get(module_row_id, [])

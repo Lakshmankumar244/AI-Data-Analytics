@@ -17,6 +17,7 @@ from pipeline.shared import (
     job_identifier,
     json_response,
 )
+from common.profiler import profile_stage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -237,16 +238,23 @@ def enqueue_prepare_batches(request, datastore, scan_id, bulk_job_id):
     )
     try:
         app = zcatalyst_sdk.initialize()
-        job_response = app.job_scheduling().job.submit_job(
-            {
-                "job_name": job_name,
-                "jobpool_name": pool_name,
-                "target_type": "Function",
-                "target_name": function_name,
-                "params": {"taskId": task_row["task_id"]},
-            }
-        )
-        catalyst_job_id = job_identifier(job_response)
+        with profile_stage(
+            "orchestration",
+            "enqueue_prepare_batches",
+            scanId=scan_id,
+            bulkJobId=bulk_job_id,
+            taskId=task_row["task_id"],
+        ):
+            job_response = app.job_scheduling().job.submit_job(
+                {
+                    "job_name": job_name,
+                    "jobpool_name": pool_name,
+                    "target_type": "Function",
+                    "target_name": function_name,
+                    "params": {"taskId": task_row["task_id"]},
+                }
+            )
+            catalyst_job_id = job_identifier(job_response)
     except Exception as exc:  # noqa: BLE001 - submission outcome may be ambiguous
         catalyst_error = catalyst_error_details(exc)
         LOGGER.exception(

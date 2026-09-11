@@ -72,6 +72,19 @@ export async function getScanHistory() {
   return readJsonResponse(res, "getScanHistory");
 }
 
+export async function deleteScan(scanId) {
+  const res = await fetch(
+    `${FUNCTION_BASE_URL}/api/scans/${encodeURIComponent(scanId)}`,
+    {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmScanId: scanId }),
+    }
+  );
+  return readJsonResponse(res, "deleteScan");
+}
+
 export async function getScanStatus(scanId) {
   const res = await fetch(
     `${FUNCTION_BASE_URL}/api/scans/${encodeURIComponent(scanId)}/status`,

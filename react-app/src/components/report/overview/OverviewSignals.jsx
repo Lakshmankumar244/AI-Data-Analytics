@@ -12,6 +12,8 @@ export default function OverviewSignals({
   cleanShare,
   attentionShare,
   usersNeedingHelp,
+  onOpenClean,
+  onOpenSuspicious,
   onOpenUsers,
 }) {
   const attentionUnavailable =
@@ -24,6 +26,7 @@ export default function OverviewSignals({
         value={cleanRecords}
         tone="strong"
         hint={shareLabel(cleanShare)}
+        onOpen={onOpenClean}
       />
       <OverviewKpiCard
         label="Need attention"
@@ -35,6 +38,7 @@ export default function OverviewSignals({
         label="Look fabricated"
         value={suspiciousRecords}
         tone="flag"
+        onOpen={onOpenSuspicious}
       />
       <OverviewKpiCard
         label="Users needing help"

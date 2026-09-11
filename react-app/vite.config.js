@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
@@ -15,13 +15,19 @@ const CLIENT_PACKAGE_JSON = "client-package.json";
 //   - .gitkeep is tracked so the directory exists before the first build. The
 //     CLI runs the pre-deploy/pre-serve script with this directory as its
 //     working directory and cannot spawn it otherwise.
+//   - 404.html copies index.html so missing nested scan URLs can fall back
+//     to the SPA as text/html. Do not emit a scans/ directory (Catalyst
+//     treats /app/scans as that folder) or an extensionless scans file
+//     (Catalyst downloads it instead of rendering).
 function catalystDeployArtifact() {
   let root;
+  let outDir;
   return {
     name: "catalyst-deploy-artifact",
     apply: "build",
     configResolved(config) {
       root = config.root;
+      outDir = resolve(config.root, config.build.outDir);
     },
     generateBundle() {
       this.emitFile({
@@ -31,12 +37,19 @@ function catalystDeployArtifact() {
       });
       this.emitFile({ type: "asset", fileName: ".gitkeep", source: "" });
     },
+    closeBundle() {
+      const indexHtml = readFileSync(resolve(outDir, "index.html"), "utf8");
+      // Only .html fallbacks: an extensionless `scans` file is served as a
+      // download (wrong Content-Type / Content-Disposition), not rendered.
+      writeFileSync(resolve(outDir, "404.html"), indexHtml);
+    },
   };
 }
 
 export default defineConfig({
   // Catalyst web client hosting serves the app under /app.
   base: "/app/",
+  appType: "spa",
   plugins: [react(), tailwindcss(), catalystDeployArtifact()],
   resolve: {
     alias: {
@@ -49,5 +62,8 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+  },
+  preview: {
+    port: 4173,
   },
 });

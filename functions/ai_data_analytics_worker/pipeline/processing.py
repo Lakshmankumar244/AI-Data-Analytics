@@ -13,6 +13,8 @@ import zipfile
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
+from worker.profiler import ProfiledApp, ScanProfiler
+
 
 AGGREGATE_SCHEMA_VERSION = "quality-aggregate-v1"
 QUALITY_RULE_VERSION = "quality-rules-v1"
@@ -171,6 +173,18 @@ def _datetime_utc(value):
     return parsed.astimezone(timezone.utc)
 
 
+def _parse_datetime_pair(value):
+    """Return (normalized ISO string, UTC datetime) from one parse."""
+    candidate = value.strip()
+    if candidate.endswith("Z"):
+        candidate = f"{candidate[:-1]}+00:00"
+    parsed = datetime.fromisoformat(candidate)
+    normalized = parsed.isoformat()
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return normalized, parsed.astimezone(timezone.utc)
+
+
 def _new_domain_accumulator(
     field_names, field_metadata, module_name, scan_to, owner_directory
 ):
@@ -192,7 +206,11 @@ def _new_domain_accumulator(
         "moduleName": module_name,
         "ownerDirectory": owner_directory,
         "duplicateFields": {
-            name: {"observations": 0, "hashes": set()}
+            name: {
+                "observations": 0,
+                "hashes": set(),
+                "validatorKind": _validator_kind(name),
+            }
             for name in duplicate_fields
         },
         "plausibility": {"checks": 0, "failures": 0, "rules": {}},
@@ -239,12 +257,16 @@ def _add_integrity_check(accumulator, rule_id, passed):
         rule["checksFailed"] += 1
 
 
-def _add_domain_record(accumulator, row, header_mapping):
+def _add_domain_record(accumulator, fields, owner_identity):
     for field_name, stats in accumulator["duplicateFields"].items():
-        value = _duplicate_normalized(field_name, row.get(header_mapping[field_name]))
+        evaluated = fields.get(field_name)
+        value = _duplicate_normalized(
+            field_name, evaluated["value"] if evaluated else ""
+        )
         if not value:
             continue
-        if _validator_kind(field_name) and not _is_valid(value, _validator_kind(field_name)):
+        validator_kind = stats["validatorKind"]
+        if validator_kind and not _is_valid(value, validator_kind):
             continue
         stats["observations"] += 1
         # A 128-bit digest keeps the in-memory uniqueness set bounded without
@@ -252,13 +274,10 @@ def _add_domain_record(accumulator, row, header_mapping):
         stats["hashes"].add(hashlib.sha256(value.encode("utf-8")).digest()[:16])
 
     for field_name in NUMERIC_FIELDS:
-        header = header_mapping.get(field_name)
-        if not header:
+        evaluated = fields.get(field_name)
+        if not evaluated or evaluated["number"] is None:
             continue
-        value = str(row.get(header) or "").strip()
-        if not value or not _is_valid(value, "number"):
-            continue
-        number = float(value.replace(",", ""))
+        number = evaluated["number"]
         passed = (
             math.isfinite(number)
             and number >= 0
@@ -268,14 +287,10 @@ def _add_domain_record(accumulator, row, header_mapping):
 
     parsed_times = {}
     for field_name in ("Created_Time", "Modified_Time"):
-        header = header_mapping.get(field_name)
-        value = row.get(header) if header else None
-        if not value:
+        evaluated = fields.get(field_name)
+        if not evaluated or evaluated["datetimeUtc"] is None:
             continue
-        try:
-            parsed_times[field_name] = _datetime_utc(value)
-        except (TypeError, ValueError):
-            continue
+        parsed_times[field_name] = evaluated["datetimeUtc"]
         cutoff = accumulator["cutoff"]
         if cutoff is not None:
             _add_plausibility_check(
@@ -289,24 +304,23 @@ def _add_domain_record(accumulator, row, header_mapping):
             parsed_times["Created_Time"] <= parsed_times["Modified_Time"],
         )
 
-    owner_header = header_mapping.get("Owner")
-    if owner_header:
-        owner = _owner_identity(row.get(owner_header), accumulator["ownerDirectory"])
-        owner_assigned = owner["ownerName"] != "Unassigned"
+    if owner_identity is not None:
+        owner_assigned = owner_identity["ownerName"] != "Unassigned"
         _add_integrity_check(accumulator, "OWNER_ASSIGNED", owner_assigned)
-        if owner_assigned and owner["ownerId"] and accumulator["ownerDirectory"] is not None:
+        if owner_assigned and owner_identity["ownerId"] and accumulator["ownerDirectory"] is not None:
             _add_integrity_check(
                 accumulator,
                 "OWNER_ACTIVE",
-                owner["ownerKey"] in accumulator["ownerDirectory"],
+                owner_identity["ownerKey"] in accumulator["ownerDirectory"],
             )
 
     if accumulator["moduleName"] in {"Contacts", "Deals"}:
-        account_header = header_mapping.get("Account_Name")
-        if account_header:
-            account_assigned = bool(str(row.get(account_header) or "").strip())
+        evaluated = fields.get("Account_Name")
+        if evaluated is not None:
             _add_integrity_check(
-                accumulator, "REQUIRED_ACCOUNT_RELATIONSHIP", account_assigned
+                accumulator,
+                "REQUIRED_ACCOUNT_RELATIONSHIP",
+                bool(evaluated["value"]),
             )
 
     modified = parsed_times.get("Modified_Time")
@@ -445,25 +459,25 @@ def _new_partial(field_names):
     }
 
 
-def _add_record(partial, row, field_names, header_mapping):
+def _add_record(partial, field_plan, fields):
     partial["recordCount"] += 1
-    for field_name in field_names:
-        raw_value = row.get(header_mapping[field_name])
-        value = "" if raw_value is None else str(raw_value).strip()
+    for spec in field_plan:
+        field_name = spec["name"]
+        evaluated = fields[field_name]
         stats = partial["fields"][field_name]
-        if not value:
+        if not evaluated["value"]:
             stats["empty"] += 1
             continue
 
         stats["populated"] += 1
-        validator_kind = _validator_kind(field_name)
-        if validator_kind:
+        kind = evaluated["kind"]
+        if kind:
             stats["checked"] += 1
-            if not _is_valid(value, validator_kind):
+            if not evaluated["valid"]:
                 stats["invalid"] += 1
 
-        if validator_kind == "datetime" and _is_valid(value, validator_kind):
-            normalized = _normalized_datetime(value)
+        if kind == "datetime" and evaluated["valid"]:
+            normalized = evaluated["normalizedDatetime"]
             bounds = partial["temporal"].setdefault(
                 field_name, {"minimum": normalized, "maximum": normalized}
             )
@@ -534,12 +548,96 @@ def _missing_issue_policy(field_name, metadata, module_name, depth_policy):
     }
 
 
-def _record_display_name(row, header_mapping):
+def _build_field_plan(field_names, field_metadata, module_name, depth_policy):
+    plan = []
+    for field_name in field_names:
+        metadata = field_metadata[field_name]
+        plan.append(
+            {
+                "name": field_name,
+                "validatorKind": _validator_kind(field_name),
+                "missingPolicy": _missing_issue_policy(
+                    field_name, metadata, module_name, depth_policy
+                ),
+                "fieldLabel": str(metadata.get("label") or field_name),
+            }
+        )
+    return tuple(plan)
+
+
+def _evaluate_record(row, field_plan, header_mapping):
+    fields = {}
+    issues = []
+    for spec in field_plan:
+        field_name = spec["name"]
+        raw_value = row.get(header_mapping[field_name])
+        value = "" if raw_value is None else str(raw_value).strip()
+        evaluated = {
+            "value": value,
+            "kind": spec["validatorKind"],
+            "valid": None,
+            "normalizedDatetime": None,
+            "datetimeUtc": None,
+            "number": None,
+        }
+        if not value:
+            policy = spec["missingPolicy"]
+            if policy is not None:
+                issues.append(
+                    {
+                        "fieldApiName": field_name,
+                        "metricGroup": "COMPLETENESS",
+                        "issueType": "MISSING_VALUE",
+                        "severity": policy["severity"],
+                        "messageCode": policy["messageCode"],
+                        "validator": None,
+                        "importance": policy["importance"],
+                        "fieldLabel": spec["fieldLabel"],
+                    }
+                )
+            fields[field_name] = evaluated
+            continue
+
+        kind = spec["validatorKind"]
+        if kind == "datetime":
+            try:
+                normalized, dt_utc = _parse_datetime_pair(value)
+                evaluated["valid"] = True
+                evaluated["normalizedDatetime"] = normalized
+                evaluated["datetimeUtc"] = dt_utc
+            except (TypeError, ValueError):
+                evaluated["valid"] = False
+        elif kind == "number":
+            if _is_valid(value, "number"):
+                evaluated["valid"] = True
+                evaluated["number"] = float(value.replace(",", ""))
+            else:
+                evaluated["valid"] = False
+        elif kind:
+            evaluated["valid"] = _is_valid(value, kind)
+
+        if kind and not evaluated["valid"]:
+            issue_type = VALIDATOR_ISSUE_TYPES[kind]
+            issues.append(
+                {
+                    "fieldApiName": field_name,
+                    "metricGroup": "VALIDITY",
+                    "issueType": issue_type,
+                    "severity": "HIGH",
+                    "messageCode": f"{issue_type}_FORMAT",
+                    "validator": kind,
+                    "importance": None,
+                    "fieldLabel": spec["fieldLabel"],
+                }
+            )
+        fields[field_name] = evaluated
+    return fields, issues
+
+
+def _record_display_name(fields):
     def value_for(field_name):
-        header = header_mapping.get(field_name)
-        if not header:
-            return ""
-        return str(row.get(header) or "").strip()
+        evaluated = fields.get(field_name)
+        return evaluated["value"] if evaluated else ""
 
     person = " ".join(
         part for part in (value_for("First_Name"), value_for("Last_Name")) if part
@@ -558,64 +656,16 @@ def _record_display_name(row, header_mapping):
 
 
 def _record_finding_candidate(
-    row,
-    field_names,
-    field_metadata,
-    header_mapping,
-    owner_directory,
+    fields,
+    issues,
+    owner_identity,
     scan_row,
     module_row,
     source_checksum,
 ):
-    record_id = str(row.get(header_mapping["id"]) or "").strip()
+    record_id = fields["id"]["value"]
     if not record_id:
         raise ValueError("Export record is missing its CRM record identifier")
-
-    issues = []
-    for field_name in field_names:
-        raw_value = row.get(header_mapping[field_name])
-        value = "" if raw_value is None else str(raw_value).strip()
-        if not value:
-            policy = _missing_issue_policy(
-                field_name,
-                field_metadata[field_name],
-                module_row["module_api_name"],
-                scan_row["depth_policy"],
-            )
-            if policy is None:
-                continue
-            issues.append(
-                {
-                    "fieldApiName": field_name,
-                    "metricGroup": "COMPLETENESS",
-                    "issueType": "MISSING_VALUE",
-                    "severity": policy["severity"],
-                    "messageCode": policy["messageCode"],
-                    "validator": None,
-                    "importance": policy["importance"],
-                    "fieldLabel": str(
-                        field_metadata[field_name].get("label") or field_name
-                    ),
-                }
-            )
-            continue
-        validator_kind = _validator_kind(field_name)
-        if validator_kind and not _is_valid(value, validator_kind):
-            issue_type = VALIDATOR_ISSUE_TYPES[validator_kind]
-            issues.append(
-                {
-                    "fieldApiName": field_name,
-                    "metricGroup": "VALIDITY",
-                    "issueType": issue_type,
-                    "severity": "HIGH",
-                    "messageCode": f"{issue_type}_FORMAT",
-                    "validator": validator_kind,
-                    "importance": None,
-                    "fieldLabel": str(
-                        field_metadata[field_name].get("label") or field_name
-                    ),
-                }
-            )
 
     if not issues:
         return None
@@ -636,12 +686,8 @@ def _record_finding_candidate(
         }
     )
     owner_key = ""
-    if "Owner" in header_mapping:
-        owner_identity = _owner_identity(
-            row.get(header_mapping["Owner"]), owner_directory
-        )
-        if owner_identity["ownerName"] != "Unassigned":
-            owner_key = owner_identity["ownerKey"]
+    if owner_identity is not None and owner_identity["ownerName"] != "Unassigned":
+        owner_key = owner_identity["ownerKey"]
     highest_severity = max(
         (issue["severity"] for issue in issues), key=SEVERITY_RANK.get
     )
@@ -658,7 +704,7 @@ def _record_finding_candidate(
             1 for issue in issues if issue["metricGroup"] == "VALIDITY"
         ),
         "staleCount": 0,
-        "displayName": _record_display_name(row, header_mapping),
+        "displayName": _record_display_name(fields),
         "issues": issues,
     }
 
@@ -881,27 +927,20 @@ def _new_owner_partial(identity):
     }
 
 
-def _add_owner_record(
-    owner_partials, row, field_names, header_mapping, owner_directory
-):
-    identity = _owner_identity(
-        row.get(header_mapping["Owner"]), owner_directory
-    )
+def _add_owner_record(owner_partials, field_plan, fields, identity):
     owner = owner_partials.setdefault(
         identity["ownerKey"], _new_owner_partial(identity)
     )
     owner["recordCount"] += 1
-    owner["totalCells"] += len(field_names)
-    for field_name in field_names:
-        raw_value = row.get(header_mapping[field_name])
-        value = "" if raw_value is None else str(raw_value).strip()
-        if not value:
+    owner["totalCells"] += len(field_plan)
+    for spec in field_plan:
+        evaluated = fields[spec["name"]]
+        if not evaluated["value"]:
             continue
         owner["populatedCells"] += 1
-        validator_kind = _validator_kind(field_name)
-        if validator_kind:
+        if evaluated["kind"]:
             owner["checkedValues"] += 1
-            if not _is_valid(value, validator_kind):
+            if not evaluated["valid"]:
                 owner["invalidValues"] += 1
 
 
@@ -919,8 +958,23 @@ def _owner_row_payload(owner):
 
 
 def _persist_batch_owners(app, scan_row, module_row, batch_row, source_checksum, owners):
+    if not owners:
+        return
+
     zcql = app.zcql()
     table = app.datastore().table("owner_batch_aggregates")
+    batch_row_id = _numeric_row_id(batch_row.get("ROWID"), "Processing batch link")
+    existing_rows = _query_all_rows(
+        zcql,
+        "select * from owner_batch_aggregates where "
+        f"processing_batch_row_id = {batch_row_id}",
+        "owner_batch_aggregates",
+    )
+    existing_by_key = {
+        str(row.get("aggregate_key") or ""): row for row in existing_rows
+    }
+    computed_at = _catalyst_datetime_now()
+    new_rows = []
     for owner in owners.values():
         payload = _owner_row_payload(owner)
         result_checksum = hashlib.sha256(
@@ -933,12 +987,6 @@ def _persist_batch_owners(app, scan_row, module_row, batch_row, source_checksum,
                 "source_checksum": source_checksum,
                 "schema_version": OWNER_SCHEMA_VERSION,
             }
-        )
-        existing = _query_one(
-            zcql,
-            "select * from owner_batch_aggregates where "
-            f"aggregate_key = '{aggregate_key}' limit 1",
-            "owner_batch_aggregates",
         )
         row_data = {
             "aggregate_id": f"owneragg_{aggregate_key[:32]}",
@@ -955,16 +1003,18 @@ def _persist_batch_owners(app, scan_row, module_row, batch_row, source_checksum,
             "invalid_values": payload["invalidValues"],
             "schema_version": OWNER_SCHEMA_VERSION,
             "result_checksum": result_checksum,
-            "computed_at": _catalyst_datetime_now(),
+            "computed_at": computed_at,
         }
         if payload["ownerId"]:
             row_data["owner_id"] = payload["ownerId"]
+        existing = existing_by_key.get(aggregate_key)
         if existing:
             if existing.get("result_checksum") != result_checksum:
                 row_data["ROWID"] = existing["ROWID"]
                 table.update_row(row_data)
         else:
-            table.insert_row(row_data)
+            new_rows.append(row_data)
+    _insert_rows_in_chunks(table, new_rows)
 
 
 def _merge_owner_rows(owner_rows, batch_row_ids):
@@ -1344,6 +1394,13 @@ def _download_source_zip(app, bulk_row):
 
 def process_and_finalize(app, task_row):
     """Process every planned batch, checkpoint it, then persist module results."""
+    profiler = ScanProfiler(
+        "PROCESS_BATCHES",
+        taskId=task_row.get("task_id"),
+        attemptCount=int(task_row.get("attempt_count") or 0),
+        priorStatus=task_row.get("status"),
+    )
+    app = ProfiledApp(app, profiler)
     datastore = app.datastore()
     zcql = app.zcql()
     bulk_row_id = _numeric_row_id(task_row.get("bulk_job_row_id"), "Bulk job link")
@@ -1381,6 +1438,8 @@ def process_and_finalize(app, task_row):
     )
     if not scan_row:
         raise ValueError("Scan was not found")
+    profiler.meta["scanId"] = scan_row.get("scan_id")
+    profiler.meta["module"] = module_row.get("module_api_name")
     owner_directory = _load_owner_directory(zcql, scan_row)
 
     try:
@@ -1390,6 +1449,12 @@ def process_and_finalize(app, task_row):
     if not isinstance(field_names, list) or not field_names:
         raise ValueError("Stored field allowlist is invalid")
     field_metadata = _parse_field_metadata(module_row, field_names)
+    field_plan = _build_field_plan(
+        field_names,
+        field_metadata,
+        str(module_row.get("module_api_name") or ""),
+        scan_row["depth_policy"],
+    )
     domain_accumulator = _new_domain_accumulator(
         field_names,
         field_metadata,
@@ -1417,7 +1482,9 @@ def process_and_finalize(app, task_row):
         {"ROWID": module_row["ROWID"], "status": "PROCESSING"}
     )
 
-    temp_path = _download_source_zip(app, bulk_row)
+    temp_path = None
+    with profiler.stage("filestore_zip_download"):
+        temp_path = _download_source_zip(app, bulk_row)
     partials = []
     records_seen = 0
     finding_summary = {
@@ -1449,31 +1516,32 @@ def process_and_finalize(app, task_row):
                 raise ValueError("Stored export must contain exactly one CSV file")
             with archive.open(csv_members[0], "r") as raw_csv:
                 with io.TextIOWrapper(raw_csv, encoding="utf-8-sig", newline="") as text_csv:
-                    reader = csv.DictReader(text_csv)
-                    headers = reader.fieldnames or []
-                    headers_by_case = {}
-                    ambiguous_headers = set()
-                    for header in headers:
-                        normalized_header = header.casefold()
-                        if normalized_header in headers_by_case:
-                            ambiguous_headers.add(normalized_header)
-                        else:
-                            headers_by_case[normalized_header] = header
-                    if ambiguous_headers:
-                        raise ValueError(
-                            "Export contains ambiguous case-insensitive headers"
-                        )
-                    header_mapping = {
-                        name: headers_by_case.get(name.casefold()) for name in field_names
-                    }
-                    missing_fields = [
-                        name for name, header in header_mapping.items() if header is None
-                    ]
-                    if missing_fields:
-                        raise ValueError(
-                            "Export is missing planned fields: " + ", ".join(missing_fields)
-                        )
-                    owner_field_available = "Owner" in header_mapping
+                    with profiler.stage("csv_open"):
+                        reader = csv.DictReader(text_csv)
+                        headers = reader.fieldnames or []
+                        headers_by_case = {}
+                        ambiguous_headers = set()
+                        for header in headers:
+                            normalized_header = header.casefold()
+                            if normalized_header in headers_by_case:
+                                ambiguous_headers.add(normalized_header)
+                            else:
+                                headers_by_case[normalized_header] = header
+                        if ambiguous_headers:
+                            raise ValueError(
+                                "Export contains ambiguous case-insensitive headers"
+                            )
+                        header_mapping = {
+                            name: headers_by_case.get(name.casefold()) for name in field_names
+                        }
+                        missing_fields = [
+                            name for name, header in header_mapping.items() if header is None
+                        ]
+                        if missing_fields:
+                            raise ValueError(
+                                "Export is missing planned fields: " + ", ".join(missing_fields)
+                            )
+                        owner_field_available = "Owner" in header_mapping
 
                     for batch_row in batch_rows:
                         source_record_count = int(batch_row["source_record_count"])
@@ -1499,118 +1567,153 @@ def process_and_finalize(app, task_row):
                                 }
                             )
 
-                        for _ in range(source_record_count):
-                            try:
-                                row = next(reader)
-                            except StopIteration as exc:
-                                raise ValueError(
-                                    "Export contains fewer records than planned"
-                                ) from exc
-                            records_seen += 1
-                            _add_domain_record(domain_accumulator, row, header_mapping)
+                        batch_ms_before = profiler.snapshot_ms()
+                        with profiler.stage(
+                            "batch_process",
+                            batchNumber=int(batch_row["batch_number"]),
+                            plannedRecords=source_record_count,
+                            resumed=reusable_partial is not None,
+                        ):
+                            for _ in range(source_record_count):
+                                try:
+                                    with profiler.accum("csv_parse"):
+                                        row = next(reader)
+                                except StopIteration as exc:
+                                    raise ValueError(
+                                        "Export contains fewer records than planned"
+                                    ) from exc
+                                profiler.add("records_processed")
+                                records_seen += 1
+                                with profiler.accum("record_evaluation"):
+                                    fields, issues = _evaluate_record(
+                                        row, field_plan, header_mapping
+                                    )
+                                    owner_identity = None
+                                    if owner_field_available:
+                                        owner_identity = _owner_identity(
+                                            fields["Owner"]["value"], owner_directory
+                                        )
+                                    _add_domain_record(
+                                        domain_accumulator, fields, owner_identity
+                                    )
+                                    if reusable_partial is None:
+                                        _add_record(partial, field_plan, fields)
+                                with profiler.accum("owner_aggregation"):
+                                    if owner_identity is not None:
+                                        _add_owner_record(
+                                            owner_partials,
+                                            field_plan,
+                                            fields,
+                                            owner_identity,
+                                        )
+                                with profiler.accum("findings_generation"):
+                                    finding = _record_finding_candidate(
+                                        fields,
+                                        issues,
+                                        owner_identity,
+                                        scan_row,
+                                        module_row,
+                                        bulk_row["source_file_checksum"],
+                                    )
+                                    if finding is None:
+                                        finding_summary["stateCounts"]["proper"] += 1
+                                    elif finding["invalidCount"] > 0:
+                                        finding_summary["stateCounts"]["inaccurate"] += 1
+                                        record_findings.append(finding)
+                                    elif finding["missingCount"] > 0:
+                                        finding_summary["stateCounts"]["incomplete"] += 1
+                                        record_findings.append(finding)
+                                    else:
+                                        finding_summary["stateCounts"]["proper"] += 1
+
                             if reusable_partial is None:
-                                _add_record(
-                                    partial, row, field_names, header_mapping
-                                )
+                                with profiler.accum("batch_checkpoint_write"):
+                                    partial_json = _canonical_json(partial)
+                                    if len(partial_json) > MAX_AGGREGATE_JSON_LENGTH:
+                                        raise ValueError(
+                                            "Batch aggregate exceeds 10000 characters"
+                                        )
+                                    result_checksum = hashlib.sha256(
+                                        partial_json.encode("utf-8")
+                                    ).hexdigest()
+                                    batch_table.update_row(
+                                        {
+                                            "ROWID": batch_row["ROWID"],
+                                            "status": "COMPLETED",
+                                            "processed_record_count": partial["recordCount"],
+                                            "partial_aggregate_json": partial_json,
+                                            "input_checksum": bulk_row["source_file_checksum"],
+                                            "result_checksum": result_checksum,
+                                            "completed_at": _catalyst_datetime_now(),
+                                            "controlled_error_code": "",
+                                        }
+                                    )
                             if owner_field_available:
-                                _add_owner_record(
-                                    owner_partials,
-                                    row,
-                                    field_names,
-                                    header_mapping,
-                                    owner_directory,
-                                )
-                            finding = _record_finding_candidate(
-                                row,
-                                field_names,
-                                field_metadata,
-                                header_mapping,
-                                owner_directory,
-                                scan_row,
-                                module_row,
-                                bulk_row["source_file_checksum"],
-                            )
-                            if finding is None:
-                                finding_summary["stateCounts"]["proper"] += 1
-                            elif finding["invalidCount"] > 0:
-                                finding_summary["stateCounts"]["inaccurate"] += 1
-                                record_findings.append(finding)
-                            elif finding["missingCount"] > 0:
-                                finding_summary["stateCounts"]["incomplete"] += 1
-                                record_findings.append(finding)
-                            else:
-                                finding_summary["stateCounts"]["proper"] += 1
-
-                        if reusable_partial is None:
-                            partial_json = _canonical_json(partial)
-                            if len(partial_json) > MAX_AGGREGATE_JSON_LENGTH:
-                                raise ValueError(
-                                    "Batch aggregate exceeds 10000 characters"
-                                )
-                            result_checksum = hashlib.sha256(
-                                partial_json.encode("utf-8")
-                            ).hexdigest()
-                            batch_table.update_row(
-                                {
-                                    "ROWID": batch_row["ROWID"],
-                                    "status": "COMPLETED",
-                                    "processed_record_count": partial["recordCount"],
-                                    "partial_aggregate_json": partial_json,
-                                    "input_checksum": bulk_row["source_file_checksum"],
-                                    "result_checksum": result_checksum,
-                                    "completed_at": _catalyst_datetime_now(),
-                                    "controlled_error_code": "",
-                                }
-                            )
-                        if owner_field_available:
-                            _persist_batch_owners(
-                                app,
-                                scan_row,
-                                module_row,
-                                batch_row,
-                                bulk_row["source_file_checksum"],
-                                owner_partials,
-                            )
-                        for finding in record_findings:
-                            finding_summary["affectedRecordCount"] += 1
-                            finding_summary["issueCount"] += len(finding["issues"])
-                            finding_summary["missingIssueCount"] += finding["missingCount"]
-                            finding_summary["invalidIssueCount"] += finding["invalidCount"]
-                            for issue in finding["issues"]:
-                                group_key = (
-                                    issue["fieldApiName"],
-                                    issue["issueType"],
-                                    issue["importance"],
-                                )
-                                group = finding_summary["issueGroups"].setdefault(
-                                    group_key,
-                                    {
-                                        "fieldApiName": issue["fieldApiName"],
-                                        "fieldLabel": issue["fieldLabel"],
-                                        "issueType": issue["issueType"],
-                                        "severity": issue["severity"],
-                                        "importance": issue["importance"],
-                                        "recordCount": 0,
-                                    },
-                                )
-                                group["recordCount"] += 1
-                                if SEVERITY_RANK.get(issue["severity"], 1) > SEVERITY_RANK.get(
-                                    group["severity"], 1
+                                with profiler.stage(
+                                    "persist_batch_owners",
+                                    batchNumber=int(batch_row["batch_number"]),
+                                    ownerCount=len(owner_partials),
                                 ):
-                                    group["severity"] = issue["severity"]
+                                    _persist_batch_owners(
+                                        app,
+                                        scan_row,
+                                        module_row,
+                                        batch_row,
+                                        bulk_row["source_file_checksum"],
+                                        owner_partials,
+                                    )
+                            with profiler.accum("findings_generation"):
+                                for finding in record_findings:
+                                    finding_summary["affectedRecordCount"] += 1
+                                    finding_summary["issueCount"] += len(finding["issues"])
+                                    finding_summary["missingIssueCount"] += finding["missingCount"]
+                                    finding_summary["invalidIssueCount"] += finding["invalidCount"]
+                                    for issue in finding["issues"]:
+                                        group_key = (
+                                            issue["fieldApiName"],
+                                            issue["issueType"],
+                                            issue["importance"],
+                                        )
+                                        group = finding_summary["issueGroups"].setdefault(
+                                            group_key,
+                                            {
+                                                "fieldApiName": issue["fieldApiName"],
+                                                "fieldLabel": issue["fieldLabel"],
+                                                "issueType": issue["issueType"],
+                                                "severity": issue["severity"],
+                                                "importance": issue["importance"],
+                                                "recordCount": 0,
+                                            },
+                                        )
+                                        group["recordCount"] += 1
+                                        if SEVERITY_RANK.get(issue["severity"], 1) > SEVERITY_RANK.get(
+                                            group["severity"], 1
+                                        ):
+                                            group["severity"] = issue["severity"]
 
-                        stored_findings = record_findings[:remaining_finding_samples]
-                        _persist_record_findings(
-                            app,
-                            scan_row,
-                            module_row,
-                            batch_row,
-                            bulk_row["source_file_checksum"],
-                            stored_findings,
+                            stored_findings = record_findings[:remaining_finding_samples]
+                            with profiler.stage(
+                                "persist_record_findings",
+                                batchNumber=int(batch_row["batch_number"]),
+                                storedFindingCount=len(stored_findings),
+                            ):
+                                _persist_record_findings(
+                                    app,
+                                    scan_row,
+                                    module_row,
+                                    batch_row,
+                                    bulk_row["source_file_checksum"],
+                                    stored_findings,
+                                )
+                            finding_summary["storedSampleCount"] += len(stored_findings)
+                            remaining_finding_samples -= len(stored_findings)
+                            partials.append(partial)
+                        profiler.meta.setdefault("batchDeltas", []).append(
+                            {
+                                "batchNumber": int(batch_row["batch_number"]),
+                                **profiler.delta_ms(batch_ms_before),
+                            }
                         )
-                        finding_summary["storedSampleCount"] += len(stored_findings)
-                        remaining_finding_samples -= len(stored_findings)
-                        partials.append(partial)
 
                     try:
                         next(reader)
@@ -1624,69 +1727,77 @@ def process_and_finalize(app, task_row):
 
     if records_seen != expected_count:
         raise ValueError("Processed record count does not match provider count")
-    aggregate = _merge_partials(partials, field_names)
+    profiler.meta["batchCount"] = len(batch_rows)
+    profiler.meta["expectedRecordCount"] = expected_count
+    with profiler.stage("merge_partials", records=expected_count):
+        aggregate = _merge_partials(partials, field_names)
     if aggregate["recordCount"] != expected_count:
         raise ValueError("Aggregated record count does not match provider count")
-    result = _persist_results(
-        app,
-        scan_row,
-        module_row,
-        bulk_row,
-        aggregate,
-        field_names,
-        _domain_payload(domain_accumulator),
-    )
-    record_summary_created = _persist_record_finding_summary(
-        app, scan_row, module_row, bulk_row, finding_summary
-    )
+    with profiler.stage("persist_results", records=expected_count):
+        result = _persist_results(
+            app,
+            scan_row,
+            module_row,
+            bulk_row,
+            aggregate,
+            field_names,
+            _domain_payload(domain_accumulator),
+        )
+    with profiler.stage("persist_record_finding_summary"):
+        record_summary_created = _persist_record_finding_summary(
+            app, scan_row, module_row, bulk_row, finding_summary
+        )
     owner_result = {"resultCount": 0, "createdResultCount": 0}
     if "Owner" in field_names:
-        owner_rows = zcql.execute_query(
-            "select * from owner_batch_aggregates where "
-            f"scan_module_row_id = {module_row_id}"
+        with profiler.stage("persist_owner_results"):
+            owner_rows = zcql.execute_query(
+                "select * from owner_batch_aggregates where "
+                f"scan_module_row_id = {module_row_id}"
+            )
+            owners = _merge_owner_rows(
+                [item["owner_batch_aggregates"] for item in owner_rows],
+                {str(row["ROWID"]) for row in batch_rows},
+            )
+            owner_result = _persist_owner_results(
+                app, scan_row, module_row, bulk_row, owners
+            )
+
+    with profiler.stage("mark_module_complete"):
+        datastore.table("bulk_read_jobs").update_row(
+            {
+                "ROWID": bulk_row["ROWID"],
+                "status": "PROCESSED",
+                "controlled_error_code": "",
+            }
         )
-        owners = _merge_owner_rows(
-            [item["owner_batch_aggregates"] for item in owner_rows],
-            {str(row["ROWID"]) for row in batch_rows},
-        )
-        owner_result = _persist_owner_results(
-            app, scan_row, module_row, bulk_row, owners
+        datastore.table("scan_module_runs").update_row(
+            {
+                "ROWID": module_row["ROWID"],
+                "status": "COMPLETED",
+                "batches_completed": len(batch_rows),
+                "records_processed": expected_count,
+            }
         )
 
-    datastore.table("bulk_read_jobs").update_row(
-        {
-            "ROWID": bulk_row["ROWID"],
-            "status": "PROCESSED",
-            "controlled_error_code": "",
+        module_results = zcql.execute_query(
+            f"select * from scan_module_runs where scan_row_id = {scan_row_id}"
+        )
+        completed_count = sum(
+            1
+            for item in module_results
+            if item["scan_module_runs"].get("status") == "COMPLETED"
+            or item["scan_module_runs"]["ROWID"] == module_row["ROWID"]
+        )
+        scan_update = {
+            "ROWID": scan_row["ROWID"],
+            "completed_module_count": completed_count,
         }
-    )
-    datastore.table("scan_module_runs").update_row(
-        {
-            "ROWID": module_row["ROWID"],
-            "status": "COMPLETED",
-            "batches_completed": len(batch_rows),
-            "records_processed": expected_count,
-        }
-    )
+        if completed_count == len(module_results):
+            scan_update["status"] = "COMPLETED"
+            scan_update["completed_at"] = _catalyst_datetime_now()
+        datastore.table("scan_jobs").update_row(scan_update)
 
-    module_results = zcql.execute_query(
-        f"select * from scan_module_runs where scan_row_id = {scan_row_id}"
-    )
-    completed_count = sum(
-        1
-        for item in module_results
-        if item["scan_module_runs"].get("status") == "COMPLETED"
-        or item["scan_module_runs"]["ROWID"] == module_row["ROWID"]
-    )
-    scan_update = {
-        "ROWID": scan_row["ROWID"],
-        "completed_module_count": completed_count,
-    }
-    if completed_count == len(module_results):
-        scan_update["status"] = "COMPLETED"
-        scan_update["completed_at"] = _catalyst_datetime_now()
-    datastore.table("scan_jobs").update_row(scan_update)
-
+    profile = profiler.summary()
     return {
         "recordCount": expected_count,
         "batchCount": len(batch_rows),
@@ -1696,4 +1807,5 @@ def process_and_finalize(app, task_row):
         "recordFindingSummaryCreated": record_summary_created,
         "ownerResultCount": owner_result["resultCount"],
         "createdOwnerResultCount": owner_result["createdResultCount"],
+        "scanProfile": profile,
     }
