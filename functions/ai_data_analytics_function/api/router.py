@@ -13,6 +13,15 @@ from bulk_read.status import refresh_bulk_read_status
 from bulk_read.submit import submit_bulk_read_job
 from common.core import json_response
 from connections.routes import activate_connection, get_connection, handle_callback, start_consent
+from salesforce.oauth import (
+    activate_salesforce_connection,
+    get_salesforce_connection,
+    handle_salesforce_callback,
+    start_salesforce_consent,
+)
+from salesforce.describe import get_salesforce_object_describe
+from salesforce.discovery import get_salesforce_metadata
+from salesforce.user_directory import get_salesforce_owner_directory
 from orchestration.routes import advance_scan
 from pipeline.task_routes import enqueue_prepare_batches, enqueue_process_batches
 from scans.routes import create_scan, discover_scan
@@ -32,7 +41,50 @@ def dispatch(request: Request):
     if request.path == "/api/zoho/connection":
         return get_connection(request, datastore)
 
+    if request.path == "/api/salesforce/consent":
+        return start_salesforce_consent(request, datastore)
+
+    if request.path == "/api/salesforce/callback":
+        return handle_salesforce_callback(request, datastore)
+
+    if request.path == "/api/salesforce/connection":
+        return get_salesforce_connection(request, datastore)
+
+    if request.path == "/api/salesforce/metadata":
+        if request.method != "GET":
+            response = json_response(
+                {"error": {"code": "METHOD_NOT_ALLOWED", "message": "Use GET"}},
+                405,
+            )
+            response.headers["Allow"] = "GET"
+            return response
+        return get_salesforce_metadata(request, datastore)
+
+    if request.path == "/api/salesforce/directory":
+        if request.method != "GET":
+            response = json_response(
+                {"error": {"code": "METHOD_NOT_ALLOWED", "message": "Use GET"}},
+                405,
+            )
+            response.headers["Allow"] = "GET"
+            return response
+        return get_salesforce_owner_directory(request, datastore)
+
     path_parts = request.path.strip("/").split("/")
+    if (
+        len(path_parts) == 5
+        and path_parts[:3] == ["api", "salesforce", "objects"]
+        and path_parts[4] == "describe"
+    ):
+        if request.method != "GET":
+            response = json_response(
+                {"error": {"code": "METHOD_NOT_ALLOWED", "message": "Use GET"}},
+                405,
+            )
+            response.headers["Allow"] = "GET"
+            return response
+        return get_salesforce_object_describe(request, datastore, path_parts[3])
+
     if (
         len(path_parts) == 5
         and path_parts[:3] == ["api", "zoho", "connections"]
@@ -46,6 +98,20 @@ def dispatch(request: Request):
             response.headers["Allow"] = "POST"
             return response
         return activate_connection(request, datastore, path_parts[3])
+
+    if (
+        len(path_parts) == 5
+        and path_parts[:3] == ["api", "salesforce", "connections"]
+        and path_parts[4] == "activate"
+    ):
+        if request.method != "POST":
+            response = json_response(
+                {"error": {"code": "METHOD_NOT_ALLOWED", "message": "Use POST"}},
+                405,
+            )
+            response.headers["Allow"] = "POST"
+            return response
+        return activate_salesforce_connection(request, datastore, path_parts[3])
 
     if request.path == "/api/scans":
         if request.method == "GET":

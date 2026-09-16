@@ -68,6 +68,10 @@ const LOCAL_PROCESS_STATES = new Set([
   "PROCESSING_PLANNED",
   "PROCESSED",
 ]);
+const EXPORT_COUNT_STATES = new Set([
+  ...DOWNLOAD_STATES,
+  ...LOCAL_PROCESS_STATES,
+]);
 
 function asCount(value) {
   const count = Number(value);
@@ -85,14 +89,28 @@ function batchCount(module) {
 }
 
 function providerRecordCount(module) {
-  return (module?.bulkJobs ?? []).reduce(
-    (highest, job) => Math.max(highest, asCount(job.providerRecordCount)),
-    0
-  );
+  return (module?.bulkJobs ?? []).reduce((highest, job) => {
+    const count = Number(job.providerRecordCount);
+    return Number.isFinite(count) && count >= 0 ? Math.max(highest, count) : highest;
+  }, 0);
+}
+
+function exportCountKnown(module) {
+  return (module?.bulkJobs ?? []).some((job) => {
+    const status = String(job.status || "");
+    return EXPORT_COUNT_STATES.has(status) || status === "COMPLETED";
+  });
+}
+
+export function hasKnownRecordTotal(module) {
+  return asCount(module?.expectedRecordCount) > 0 || exportCountKnown(module);
 }
 
 export function moduleRecordTotal(module) {
-  return asCount(module?.expectedRecordCount) || providerRecordCount(module);
+  const expected = asCount(module?.expectedRecordCount);
+  if (expected) return expected;
+  if (exportCountKnown(module)) return providerRecordCount(module);
+  return 0;
 }
 
 export function moduleRecordsProcessed(module) {
@@ -155,35 +173,49 @@ export function deriveModuleStage(module) {
 }
 
 export function moduleDisplayProgress(module, { isActive = false, isDone = false } = {}) {
+  const known = hasKnownRecordTotal(module);
   const total = moduleRecordTotal(module);
   const actual = moduleRecordsProcessed(module);
 
   if (isDone || module?.status === "COMPLETED") {
-    const completedTotal = total || actual;
+    const completedTotal = known ? total : actual;
     return {
       percent: 100,
       scanned: completedTotal,
-      estimatedTotal: completedTotal,
+      estimatedTotal: known ? completedTotal : null,
+      hasKnownTotal: known || actual > 0,
     };
   }
 
   if (!isActive) {
-    return { percent: 0, scanned: 0, estimatedTotal: total };
+    return {
+      percent: 0,
+      scanned: 0,
+      estimatedTotal: known ? total : null,
+      hasKnownTotal: known,
+    };
   }
 
   const stage = deriveModuleStage(module);
   if (actual > 0) {
-    const percent = total
-      ? Math.min(99, Math.round((actual / total) * 100))
-      : STAGE_BAR_PERCENT.processing;
-    return { percent, scanned: actual, estimatedTotal: total };
+    const percent =
+      known && total
+        ? Math.min(99, Math.round((actual / total) * 100))
+        : STAGE_BAR_PERCENT.processing;
+    return {
+      percent,
+      scanned: actual,
+      estimatedTotal: known ? total : null,
+      hasKnownTotal: known,
+    };
   }
 
   const percent = STAGE_BAR_PERCENT[stage.id] ?? STAGE_BAR_PERCENT.preparing;
   return {
     percent,
-    scanned: total ? Math.round((total * percent) / 100) : 0,
-    estimatedTotal: total,
+    scanned: known && total ? Math.round((total * percent) / 100) : 0,
+    estimatedTotal: known ? total : null,
+    hasKnownTotal: known,
   };
 }
 

@@ -27,34 +27,45 @@ def list_scans(request, datastore):
     try:
         zcql = zcatalyst_sdk.initialize().zcql()
         user_id = get_current_user_id(request).replace("'", "''")
-        connections = _rows(
-            zcql,
-            f"select * from zoho_connections where user_id = '{user_id}'",
-            "zoho_connections",
-        )
         scans = []
-        for connection in connections:
-            connection_row_id = int(connection["ROWID"])
-            connection_scans = _rows(
+        for table_name, provider in (
+            ("zoho_connections", "zoho"),
+            ("salesforce_connections", "salesforce"),
+        ):
+            connections = _rows(
                 zcql,
-                "select * from scan_jobs where "
-                f"connection_row_id = {connection_row_id} "
-                "order by CREATEDTIME desc limit 50",
-                "scan_jobs",
+                f"select * from {table_name} where user_id = '{user_id}'",
+                table_name,
             )
-            for scan in connection_scans:
-                scan["_source_connection"] = {
-                    "connectionId": str(connection["ROWID"]),
-                    "organizationId": str(connection.get("zoho_org_id") or ""),
-                    "organizationName": str(
-                        connection.get("organization_name") or ""
-                    ),
-                    "name": str(connection.get("connected_name") or ""),
-                    "email": str(connection.get("connected_email") or ""),
-                    "isActive": connection.get("is_active") is True
-                    or str(connection.get("is_active") or "").lower() == "true",
-                }
-                scans.append(scan)
+            for connection in connections:
+                connection_row_id = int(connection["ROWID"])
+                connection_scans = _rows(
+                    zcql,
+                    "select * from scan_jobs where "
+                    f"connection_row_id = {connection_row_id} "
+                    "order by CREATEDTIME desc limit 50",
+                    "scan_jobs",
+                )
+                org_id_field = (
+                    "salesforce_org_id" if provider == "salesforce" else "zoho_org_id"
+                )
+                for scan in connection_scans:
+                    scan_provider = str(scan.get("crm_provider") or "zoho").strip().lower() or "zoho"
+                    if scan_provider != provider:
+                        continue
+                    scan["_source_connection"] = {
+                        "connectionId": str(connection["ROWID"]),
+                        "provider": provider,
+                        "organizationId": str(connection.get(org_id_field) or ""),
+                        "organizationName": str(
+                            connection.get("organization_name") or ""
+                        ),
+                        "name": str(connection.get("connected_name") or ""),
+                        "email": str(connection.get("connected_email") or ""),
+                        "isActive": connection.get("is_active") is True
+                        or str(connection.get("is_active") or "").lower() == "true",
+                    }
+                    scans.append(scan)
 
         history = []
         for scan in scans:

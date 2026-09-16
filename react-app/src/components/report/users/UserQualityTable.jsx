@@ -7,6 +7,7 @@ import UserStatusBadge from "./UserStatusBadge";
 import StateBreakdown from "../../shared/StateBreakdown";
 import {
   isInsufficient,
+  suggestedNextStep,
   userCleanShare,
   userStanding,
 } from "./usersModel";
@@ -29,6 +30,7 @@ function MixCell({ owner, minRecords }) {
 function OwnerRow({ owner, minRecords }) {
   const standing = userStanding(owner, minRecords);
   const cleanShare = userCleanShare(owner, minRecords);
+  const nextStep = suggestedNextStep(owner, minRecords);
 
   return (
     <tr className="hover:bg-surface-sunken/70">
@@ -53,7 +55,7 @@ function OwnerRow({ owner, minRecords }) {
         <UserStatusBadge standing={standing} />
       </td>
       <td className="min-w-[9rem] border-b border-line py-3 pl-3 align-middle last:pr-0">
-        <span className="text-[13px] leading-snug text-ink-soft">{standing.action}</span>
+        <span className="text-[13px] leading-snug text-ink-soft">{nextStep}</span>
       </td>
     </tr>
   );
@@ -62,6 +64,7 @@ function OwnerRow({ owner, minRecords }) {
 function OwnerCard({ owner, minRecords }) {
   const standing = userStanding(owner, minRecords);
   const cleanShare = userCleanShare(owner, minRecords);
+  const nextStep = suggestedNextStep(owner, minRecords);
 
   return (
     <li className="flex min-w-0 flex-col gap-3 border-t border-line py-4 first:border-t-0 first:pt-0">
@@ -97,7 +100,7 @@ function OwnerCard({ owner, minRecords }) {
         <div className="min-w-0">
           <span className="eyebrow">Suggested next step</span>
           <p className="mt-1.5 m-0 text-[13px] leading-snug text-ink-soft">
-            {standing.action}
+            {nextStep}
           </p>
         </div>
       </div>

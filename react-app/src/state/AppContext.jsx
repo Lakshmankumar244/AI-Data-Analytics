@@ -42,6 +42,7 @@ export function useActions() {
       setFilter: (patch) => dispatch({ type: "setFilter", patch }),
       showHome: () => dispatch({ type: "showHome" }),
       showSetup: () => dispatch({ type: "showSetup" }),
+      showConnect: () => dispatch({ type: "showConnect" }),
       reset: () => dispatch({ type: "reset" }),
     }),
     [dispatch]

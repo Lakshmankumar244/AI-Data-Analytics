@@ -132,9 +132,10 @@ export default function RunningScreen() {
       const isActive = !done && module.moduleApiName === activeModule;
       const display = moduleDisplayProgress(module, { isActive, isDone: done });
       nextProgress[module.moduleApiName] = {
-        scanned: display.scanned,
-        estimatedTotal: display.estimatedTotal,
-        batchesCompleted: Number(module.batchesCompleted) || 0,
+          scanned: display.scanned,
+          estimatedTotal: display.estimatedTotal,
+          hasKnownTotal: display.hasKnownTotal,
+          batchesCompleted: Number(module.batchesCompleted) || 0,
         batchesTotal: Number(module.batches?.total) || 0,
         phase: moduleStage.id,
         percent: display.percent,

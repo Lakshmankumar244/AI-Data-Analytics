@@ -9,6 +9,16 @@ function DockStat({ label, children }) {
   );
 }
 
+function runtimeLabel(estimate) {
+  const minSeconds = Number(estimate.estimatedRuntimeMinSeconds) || 0;
+  const maxSeconds = Number(estimate.estimatedRuntimeMaxSeconds) || 0;
+  if (!minSeconds && !maxSeconds) return "—";
+  const minLabel = formatSeconds(minSeconds);
+  const maxLabel = formatSeconds(maxSeconds);
+  if (minLabel === maxLabel) return `About ${minLabel}`;
+  return `${minLabel}–${maxLabel}`;
+}
+
 export default function CostEstimate({ estimate, loading }) {
   if (loading || !estimate) {
     return (
@@ -19,15 +29,23 @@ export default function CostEstimate({ estimate, loading }) {
     );
   }
 
+  const credits = Number(
+    estimate.estimatedApiCredits ?? estimate.estimatedApiCalls ?? 0
+  );
+
   return (
     <>
       <DockStat label="Records">
-        <span className="mono">{formatNumber(estimate.recordsInRange)}</span>
+        <span className="mono">
+          {estimate.recordsKnown
+            ? formatNumber(estimate.recordsInRange)
+            : "—"}
+        </span>
       </DockStat>
       <DockStat label="Runtime">
-        <span className="mono">{formatSeconds(estimate.estimatedRuntimeSeconds)}</span>
+        <span className="mono">{runtimeLabel(estimate)}</span>
         <span className="ml-1.5 font-normal text-ink-muted">
-          {formatNumber(estimate.estimatedApiCalls)} API calls
+          {formatNumber(credits)} API credits
         </span>
       </DockStat>
     </>

@@ -3,6 +3,7 @@ import {
   Boxes,
   Inbox,
   LayoutDashboard,
+  Link2,
   PanelLeft,
   PanelLeftClose,
   ScanSearch,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 const WORKSPACE_ITEMS = [
   { id: "home", phase: "home", label: "Reports", icon: Inbox, action: "showHome" },
   { id: "setup", phase: "setup", label: "New scan", icon: ScanSearch, action: "showSetup" },
+  { id: "connect", phase: "connect", label: "Connect to CRM", icon: Link2, action: "showConnect" },
 ];
 
 const REPORT_ITEMS = [
@@ -84,8 +86,9 @@ export function AppSidebar({
   setMobileOpen,
 }) {
   const { phase, tab } = useAppState();
-  const { showHome, showSetup, setTab } = useActions();
+  const { showHome, showSetup, showConnect, setTab } = useActions();
   const closeMobile = () => setMobileOpen(false);
+  const workspaceActions = { showHome, showSetup, showConnect };
 
   function go(action) {
     action();
@@ -162,7 +165,7 @@ export function AppSidebar({
                 icon={item.icon}
                 label={item.label}
                 current={phase === item.phase}
-                onClick={() => go(item.action === "showHome" ? showHome : showSetup)}
+                onClick={() => go(workspaceActions[item.action])}
               />
             ))}
             {phase === "running" && (

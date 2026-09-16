@@ -1,11 +1,30 @@
+import { coalesceConnectedPayload, deriveActiveConnection } from "../data/activeConnection";
 import { defaultScanConfig, persistScanConfig } from "./initialState";
+
+function withActiveConnection(state, preferredKey) {
+  const activeConnectionKey =
+    preferredKey === undefined ? state.activeConnectionKey : preferredKey;
+  const activeConnection = deriveActiveConnection(
+    state.connection,
+    state.salesforceConnection,
+    activeConnectionKey
+  );
+  return {
+    ...state,
+    activeConnectionKey: activeConnection?.connectionKey ?? null,
+    activeConnection,
+  };
+}
+
+function nextConnectedPayload(previous, incoming) {
+  if (incoming === undefined) return previous;
+  return coalesceConnectedPayload(previous, incoming);
+}
 
 function scanConfigForConnection(scanConfig, connection) {
   if (!Array.isArray(connection?.accessibleModules)) return scanConfig;
   const allowed = new Set(
-    connection.accessibleModules
-      .filter((module) => Number(module.recordCount) > 0)
-      .map((module) => module.apiName)
+    connection.accessibleModules.map((module) => module.apiName)
   );
   const retained = scanConfig.modules.filter((module) => allowed.has(module));
   const modules = retained.length ? retained : Array.from(allowed);
@@ -26,31 +45,47 @@ export function reducer(state, action) {
   switch (action.type) {
     case "sessionLoaded": {
       const scanHistory = action.scanHistory ?? [];
-      return {
+      return withActiveConnection({
         ...state,
         // Session restore waits for getConnection() in App.jsx (boot phase)
-        // before this action fires. URL restore may land on setup, home,
-        // running, or report instead of always Configure scan.
+        // before this action fires. URL restore may land on setup, connect,
+        // home, running, or report instead of always Configure scan.
         phase: action.phase ?? "setup",
-        connection: action.connection,
+        connection: nextConnectedPayload(state.connection, action.connection),
+        salesforceConnection: nextConnectedPayload(
+          state.salesforceConnection,
+          action.salesforceConnection
+        ),
         scanConfig: scanConfigForConnection(state.scanConfig, action.connection),
         scanHistory,
         historyNeedsRefresh: false,
         connectionNotice: action.notice ?? null,
+        salesforceNotice: action.salesforceNotice ?? null,
         errorMessage: null,
         scanId: action.scanId ?? null,
         scan: action.scan ?? null,
         scanContext: action.scanContext ?? null,
-      };
+        activeConnectionKey: null,
+      });
     }
 
     case "connectionLoaded":
-      return {
-        ...state,
-        connection: action.connection,
-        scanConfig: scanConfigForConnection(state.scanConfig, action.connection),
-        connectionNotice: null,
-      };
+      return withActiveConnection(
+        {
+          ...state,
+          connection: nextConnectedPayload(state.connection, action.connection),
+          salesforceConnection: nextConnectedPayload(
+            state.salesforceConnection,
+            action.salesforceConnection
+          ),
+          scanConfig: scanConfigForConnection(
+            state.scanConfig,
+            nextConnectedPayload(state.connection, action.connection)
+          ),
+          connectionNotice: null,
+        },
+        action.activeConnectionKey
+      );
 
     case "historyLoaded":
       return {
@@ -83,7 +118,11 @@ export function reducer(state, action) {
     // stay on the connect panel with a quiet explanation instead of
     // dropping into ErrorState.
     case "connectionDeclined":
-      return { ...state, connection: null, connectionNotice: action.message };
+      return withActiveConnection({
+        ...state,
+        connection: null,
+        connectionNotice: action.message,
+      });
 
     case "setScanConfig": {
       const scanConfig = { ...state.scanConfig, ...action.patch };
@@ -154,6 +193,9 @@ export function reducer(state, action) {
 
     case "showSetup":
       return { ...state, phase: "setup", scanId: null, scanContext: null, scan: null };
+
+    case "showConnect":
+      return { ...state, phase: "connect", scanId: null, scanContext: null, scan: null };
 
     case "setTab":
       return { ...state, tab: action.tab };

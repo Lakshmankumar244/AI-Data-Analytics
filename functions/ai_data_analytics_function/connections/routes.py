@@ -17,16 +17,19 @@ from common.core import (
     from_catalyst_datetime,
     get_current_user,
     get_current_user_id,
+    json_response,
     to_catalyst_column_datetime,
     to_catalyst_datetime,
     with_fragment_parameter,
 )
-from connections.repository import find_active_connection
-from connections.token import get_connection_access_token
+from connections.activation import (
+    ZOHO_CONNECTIONS_TABLE,
+    activate_exclusive_connection,
+)
+from connections.repository import connection_is_active, find_connected_connection
 from zoho.client import (
     fetch_accessible_modules,
     fetch_organization_metadata,
-    refresh_module_record_counts,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,37 +72,6 @@ def migrate_legacy_connection(datastore, user):
     )
     logger.info("Migrated legacy development connection to Catalyst user %s", user_id)
     return True
-
-def refresh_and_store_accessible_module_counts(datastore, connection_row: dict) -> list:
-    """Refresh connection module totals from Zoho without changing past scans."""
-    try:
-        modules = json.loads(connection_row.get("accessible_modules") or "[]")
-    except (TypeError, ValueError, json.JSONDecodeError):
-        modules = []
-    if not isinstance(modules, list) or not modules:
-        return []
-
-    try:
-        access_token, api_domain, _token_refreshed = get_connection_access_token(
-            datastore, connection_row
-        )
-        refreshed = refresh_module_record_counts(access_token, api_domain, modules)
-    except Exception as exc:  # noqa: BLE001 - keep the stored list if Zoho is unavailable
-        logger.warning("Could not refresh Zoho module record counts: %s", exc)
-        return modules
-
-    try:
-        datastore.table("zoho_connections").update_row(
-            {
-                "ROWID": connection_row["ROWID"],
-                "accessible_modules": json.dumps(refreshed),
-                "modules_synced_at": to_catalyst_datetime(datetime.now(timezone.utc)),
-            }
-        )
-    except Exception as exc:  # noqa: BLE001 - still return live counts to the client
-        logger.warning("Could not persist refreshed module record counts: %s", exc)
-    return refreshed
-
 
 def start_consent(request: Request, datastore):
     user_id = get_current_user_id(request)
@@ -300,7 +272,7 @@ def get_connection(request: Request, datastore):
     user_id = str(user["user_id"])
     legacy_migrated = migrate_legacy_connection(datastore, user)
 
-    row = find_active_connection(zcql, user_id)
+    row = find_connected_connection(zcql, user_id)
     if not row:
         return make_response(json.dumps(None), 200, {"Content-Type": "application/json"})
 
@@ -317,6 +289,7 @@ def get_connection(request: Request, datastore):
             ),
             "name": str(item["zoho_connections"].get("connected_name") or ""),
             "email": str(item["zoho_connections"].get("connected_email") or ""),
+            "isActive": connection_is_active(item["zoho_connections"]),
         }
         for item in all_rows
     ]
@@ -328,24 +301,16 @@ def get_connection(request: Request, datastore):
         )
     )
 
-    refresh_modules = str(request.args.get("refreshModules") or "").lower() in {
-        "1",
-        "true",
-        "yes",
-    }
     try:
         accessible_modules = json.loads(row.get("accessible_modules") or "[]")
     except (TypeError, ValueError, json.JSONDecodeError):
         accessible_modules = []
-    if refresh_modules:
-        accessible_modules = refresh_and_store_accessible_module_counts(
-            datastore, row
-        )
 
     connection = {
         "connectionId": str(row["ROWID"]),
         "organizationId": row.get("zoho_org_id", ""),
         "organizationName": row.get("organization_name", ""),
+        "isActive": connection_is_active(row),
         "catalystUser": {
             "userId": user_id,
             "name": " ".join(
@@ -367,7 +332,7 @@ def get_connection(request: Request, datastore):
 
 
 def activate_connection(request: Request, datastore, connection_row_id: str):
-    """Select an existing connection without repeating Zoho consent."""
+    """Select an existing Zoho connection without repeating Zoho consent."""
     if not str(connection_row_id).isdigit():
         return make_response("Not found", 404)
 
@@ -382,24 +347,26 @@ def activate_connection(request: Request, datastore, connection_row_id: str):
     if not rows:
         return make_response("Not found", 404)
 
-    table = datastore.table("zoho_connections")
     selected = rows[0]["zoho_connections"]
-    table.update_row(
-        {
-            "ROWID": selected["ROWID"],
-            "is_active": True,
-            "last_selected_at": to_catalyst_column_datetime(datetime.now(timezone.utc)),
-        }
-    )
-    user_rows = zcql.execute_query(
-        "select ROWID,is_active from zoho_connections where "
-        f"user_id = '{_escape_zcql(user_id)}'"
-    )
-    for item in user_rows:
-        connection = item["zoho_connections"]
-        if str(connection["ROWID"]) != str(selected["ROWID"]) and (
-            connection.get("is_active") is True
-            or str(connection.get("is_active") or "").lower() == "true"
-        ):
-            table.update_row({"ROWID": connection["ROWID"], "is_active": False})
+    try:
+        activate_exclusive_connection(
+            datastore,
+            zcql,
+            user_id,
+            ZOHO_CONNECTIONS_TABLE,
+            selected["ROWID"],
+        )
+    except Exception:
+        logger.exception(
+            "Zoho connection activation failed for user %s", user_id
+        )
+        return json_response(
+            {
+                "error": {
+                    "code": "CONNECTION_ACTIVATION_FAILED",
+                    "message": "The connection could not be selected",
+                }
+            },
+            500,
+        )
     return get_connection(request, datastore)

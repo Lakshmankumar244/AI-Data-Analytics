@@ -1,5 +1,4 @@
 import * as api from "./data/client";
-import { adaptAnalyticsResults } from "./data/analyticsAdapter";
 
 const BASE = String(import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
@@ -16,6 +15,7 @@ export function parseLocation(pathname = window.location.pathname) {
   if (!path.startsWith("/")) path = `/${path}`;
   const parts = path.replace(/\/+$/, "").split("/").filter(Boolean);
   if (parts.length === 0) return { name: "setup" };
+  if (parts[0] === "connect") return { name: "connect" };
   if (parts[0] !== "scans") return { name: "setup" };
   if (parts.length === 1) return { name: "home" };
   const scanId = decodeURIComponent(parts[1] || "");
@@ -29,6 +29,7 @@ export function parseLocation(pathname = window.location.pathname) {
 
 export function pathFor(route) {
   if (route?.name === "home") return withBase("/scans");
+  if (route?.name === "connect") return withBase("/connect");
   if (route?.name === "running" && route.scanId) {
     return withBase(`/scans/${encodeURIComponent(route.scanId)}`);
   }
@@ -40,6 +41,7 @@ export function pathFor(route) {
 
 export function routeFromState(phase, scanId) {
   if (phase === "home") return { name: "home" };
+  if (phase === "connect") return { name: "connect" };
   if (phase === "running" && scanId) return { name: "running", scanId };
   if (phase === "report" && scanId) return { name: "report", scanId };
   if (phase === "setup") return { name: "setup" };
@@ -81,6 +83,9 @@ export async function resolveRoute(route, scans = []) {
   if (!route || route.name === "setup") {
     return { phase: "setup" };
   }
+  if (route.name === "connect") {
+    return { phase: "connect" };
+  }
   if (route.name === "home") {
     return { phase: "home" };
   }
@@ -89,12 +94,12 @@ export async function resolveRoute(route, scans = []) {
   if (!scanId) return { phase: "home", urlRoute: { name: "home" } };
 
   if (route.name === "report") {
-    const results = await api.getScanResults(scanId);
+    const scorecard = await api.getScorecard(scanId);
     const context = contextFromHistory(scans, scanId);
     return {
       phase: "report",
       scanId,
-      scan: { ...adaptAnalyticsResults(results), reportContext: context },
+      scan: { ...scorecard, reportContext: context },
     };
   }
 
@@ -103,13 +108,15 @@ export async function resolveRoute(route, scans = []) {
   return { phase: "running", scanId, scanContext: context };
 }
 
-export function dispatchResolved(dispatch, resolved, { session = false, connection, scans, notice } = {}) {
+export function dispatchResolved(dispatch, resolved, { session = false, connection, salesforceConnection, scans, notice, salesforceNotice } = {}) {
   if (session) {
     dispatch({
       type: "sessionLoaded",
       connection,
+      salesforceConnection,
       scanHistory: scans ?? [],
       notice,
+      salesforceNotice,
       phase: resolved.phase,
       scanId: resolved.scanId ?? null,
       scan: resolved.scan ?? null,
@@ -119,6 +126,10 @@ export function dispatchResolved(dispatch, resolved, { session = false, connecti
   }
   if (resolved.phase === "home") {
     dispatch({ type: "showHome" });
+    return;
+  }
+  if (resolved.phase === "connect") {
+    dispatch({ type: "showConnect" });
     return;
   }
   if (resolved.phase === "setup") {

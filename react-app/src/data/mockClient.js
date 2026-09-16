@@ -1,16 +1,9 @@
 import connectionFixture from "./fixtures/connection.json";
-import scorecardFixture from "./fixtures/scorecard.json";
-import userFixture from "./fixtures/user.json";
 import trendFixture from "./fixtures/trend.json";
 import recordsFixture from "./fixtures/records.json";
 import fixPlanFixture from "./fixtures/fix.json";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Rough per-record timing used to size the mock progress simulation and the
-// Setup screen's cost/runtime estimate (D9) - not a real API cost model,
-// just enough to make the running screen feel proportional to scope chosen.
-const MS_PER_RECORD = 4;
 
 // Mock stand-in for "has this user completed the Zoho OAuth consent flow".
 // The real /api/zoho/consent -> Zoho -> callback round trip will set this
@@ -45,24 +38,6 @@ export async function getConnection() {
   return isMockConnected() ? connectionFixture : null;
 }
 
-export async function estimateScan(scopeConfig) {
-  await delay(150);
-  const modules = connectionFixture.accessibleModules.filter((m) =>
-    scopeConfig.modules.includes(m.apiName)
-  );
-  const depthCaps = { quick: 1000, presales: 5000, deep: 20000, full: Infinity };
-  const cap = depthCaps[scopeConfig.depth] ?? 5000;
-  const recordsInRange = modules.reduce(
-    (sum, m) => sum + Math.min(m.recordCount, cap),
-    0
-  );
-  return {
-    recordsInRange,
-    estimatedApiCalls: Math.ceil(recordsInRange / 200) + modules.length * 2,
-    estimatedRuntimeSeconds: Math.round((recordsInRange * MS_PER_RECORD) / 1000),
-  };
-}
-
 export async function startScan(scopeConfig, onProgress) {
   const scanId = `scan_${Date.now()}`;
   const modules = connectionFixture.accessibleModules.filter((m) =>
@@ -90,16 +65,6 @@ export async function startScan(scopeConfig, onProgress) {
   }
 
   return { scanId };
-}
-
-export async function getScorecard(_scanId) {
-  await delay(300);
-  return scorecardFixture;
-}
-
-export async function getUserDetail(_scanId) {
-  await delay(250);
-  return userFixture;
 }
 
 export async function getTrend(_scanId, _grain, _clock) {

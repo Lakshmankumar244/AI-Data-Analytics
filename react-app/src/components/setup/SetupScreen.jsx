@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { useAppState, useActions, useAppDispatch } from "../../state/AppContext";
 import * as api from "../../data/client";
-import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
 import { formatReportPeriod } from "../../utils/format";
 import { ContentContainer } from "../layout";
 import { Button } from "@/components/ui/button";
 import AccessibleModulesList from "./AccessibleModulesList";
-import ConnectZohoPanel from "./ConnectZohoPanel";
 import DepthSelector from "./DepthSelector";
 import ClockToggle from "./ClockToggle";
 import { DateRangeField, DateRangePresets, RANGE_LABELS } from "./DateRangePicker";
@@ -71,7 +69,7 @@ function orgInitials(label) {
 }
 
 export default function SetupScreen() {
-  const { connection, scanConfig, connectionNotice, scanHistory } = useAppState();
+  const { connection, scanConfig, scanHistory } = useAppState();
   const { setScanConfig } = useActions();
   const dispatch = useAppDispatch();
   const [estimate, setEstimate] = useState(null);
@@ -83,49 +81,28 @@ export default function SetupScreen() {
   useEffect(() => {
     if (Array.isArray(connection?.accessibleModules) && scanConfig.modules.length === 0) {
       setScanConfig({
-        modules: connection.accessibleModules
-          .filter((module) => Number(module.recordCount) > 0)
-          .map((module) => module.apiName),
+        modules: connection.accessibleModules.map((module) => module.apiName),
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection]);
 
   useEffect(() => {
-    if (!connection?.connectionId) return undefined;
-    let cancelled = false;
-    api
-      .getConnection({ refreshModules: true })
-      .then((nextConnection) => {
-        if (!cancelled && nextConnection) {
-          dispatch({ type: "connectionLoaded", connection: nextConnection });
-        }
-      })
-      .catch(() => {
-        // Keep the stored module list if live Zoho counts cannot be refreshed.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [connection?.connectionId, dispatch]);
-
-  useEffect(() => {
     if (!scanConfig.modules.length) {
       setEstimate(null);
+      setEstimating(false);
       return;
     }
-    let cancelled = false;
-    setEstimating(true);
-    api.estimateScan(scanConfig).then((result) => {
-      if (!cancelled) {
-        setEstimate(result);
-        setEstimating(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [scanConfig.modules, scanConfig.depth]);
+    setEstimate(
+      api.estimateScan(scanConfig, connection?.accessibleModules ?? [])
+    );
+    setEstimating(false);
+  }, [connection?.accessibleModules, scanConfig]);
+
+  useEffect(() => {
+    if (connection === "loading" || connection) return;
+    dispatch({ type: "showConnect" });
+  }, [connection, dispatch]);
 
   useEffect(() => {
     if (connecting) {
@@ -166,8 +143,8 @@ export default function SetupScreen() {
 
   if (!connection) {
     return (
-      <ContentContainer className="flex min-h-full flex-col justify-center py-12 sm:py-16">
-        <ConnectZohoPanel onConnect={handleConnect} connecting={connecting} notice={connectionNotice} />
+      <ContentContainer className="flex min-h-0 w-full flex-1 flex-col py-8">
+        <LoadingState label="Checking your connection" />
       </ContentContainer>
     );
   }
@@ -176,7 +153,7 @@ export default function SetupScreen() {
     const module = connection.accessibleModules.find(
       (candidate) => candidate.apiName === apiName
     );
-    if (!module || Number(module.recordCount) <= 0) return;
+    if (!module) return;
     const set = new Set(scanConfig.modules);
     set.has(apiName) ? set.delete(apiName) : set.add(apiName);
     setScanConfig({ modules: Array.from(set) });
@@ -185,9 +162,7 @@ export default function SetupScreen() {
   function selectAllModules(selectAll) {
     setScanConfig({
       modules: selectAll
-        ? connection.accessibleModules
-            .filter((module) => Number(module.recordCount) > 0)
-            .map((module) => module.apiName)
+        ? connection.accessibleModules.map((module) => module.apiName)
         : [],
     });
   }
@@ -197,12 +172,12 @@ export default function SetupScreen() {
     try {
       const createdScan = await api.startScan(scanConfig);
       if (createdScan.reused && createdScan.status === "COMPLETED") {
-        const results = await api.getScanResults(createdScan.scanId);
+        const scorecard = await api.getScorecard(createdScan.scanId);
         dispatch({
           type: "scanComplete",
           scanId: createdScan.scanId,
           scan: {
-            ...adaptAnalyticsResults(results),
+            ...scorecard,
             reportContext: createdScan.reportContext,
             reuseNotice:
               "No CRM changes were found for this scope. Showing the latest matching report.",

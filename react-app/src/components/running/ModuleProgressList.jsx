@@ -13,14 +13,15 @@ const PHASE_LABEL = {
 
 function recordLine(p, isDone) {
   const scanned = p?.scanned ?? 0;
-  const total = p?.estimatedTotal || 0;
+  const known = Boolean(p?.hasKnownTotal);
+  const total = known ? Number(p?.estimatedTotal) || 0 : 0;
   const batchesCompleted = p?.batchesCompleted || 0;
   const batchesTotal = p?.batchesTotal || 0;
 
-  if (isDone && !total && !scanned) return "0 records in range";
+  if (isDone && known && !total && !scanned) return "0 records in range";
 
   const parts = [];
-  if (total) {
+  if (known && total > 0) {
     parts.push(`${formatNumber(scanned)} / ${formatNumber(total)} records`);
   } else if (scanned) {
     parts.push(`${formatNumber(scanned)} records processed`);

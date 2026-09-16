@@ -38,6 +38,26 @@ function measuredScore(completeness, validity) {
   );
 }
 
+function namedValue(value) {
+  if (typeof value === "string") return value.trim();
+  if (value && typeof value === "object") {
+    return String(value.name || value.display_label || value.teamName || "").trim();
+  }
+  return "";
+}
+
+function ownerTeam(data = {}) {
+  return (
+    namedValue(data.team) ||
+    namedValue(data.teamName) ||
+    namedValue(data.department) ||
+    namedValue(data.roleName) ||
+    namedValue(data.role) ||
+    namedValue(data.profile) ||
+    ""
+  );
+}
+
 export function safeOwnerName(value) {
   const name = String(value || "Unassigned").trim();
   return /^\d{10,}$/.test(name) ? "Unknown owner" : name;
@@ -54,7 +74,7 @@ export function groupOwnerAnalytics(modules = [], filterModules = []) {
       const owner = grouped.get(data.ownerKey) ?? {
         ownerKey: data.ownerKey,
         ownerName: safeOwnerName(data.ownerName),
-        team: data.team || data.teamName || "",
+        team: ownerTeam(data),
         modules: new Set(),
         recordCount: 0,
         totalCells: 0,
@@ -64,8 +84,8 @@ export function groupOwnerAnalytics(modules = [], filterModules = []) {
         stateBreakdown: null,
       };
       owner.modules.add(module.moduleApiName);
-      if (!owner.team && (data.team || data.teamName)) {
-        owner.team = data.team || data.teamName;
+      if (!owner.team) {
+        owner.team = ownerTeam(data);
       }
       for (const key of [
         "recordCount",

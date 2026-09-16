@@ -142,7 +142,12 @@ def resolve_scan_window(range_config: dict, now_utc: datetime):
     raise ValueError("Unsupported date range")
 
 
-def validate_scan_config(payload: dict, connection_row: dict) -> dict:
+def validate_scan_config(
+    payload: dict,
+    connection_row: dict,
+    clock_fields=None,
+    accessible_names=None,
+):
     if not isinstance(payload, dict):
         raise ValueError("The request body must be a JSON object")
 
@@ -154,12 +159,19 @@ def validate_scan_config(payload: dict, connection_row: dict) -> dict:
     if len(set(modules)) != len(modules):
         raise ValueError("Duplicate modules are not allowed")
 
-    accessible_modules = json.loads(connection_row.get("accessible_modules") or "[]")
-    accessible_names = {
-        module.get("apiName")
-        for module in accessible_modules
-        if isinstance(module, dict) and module.get("apiName")
-    }
+    if accessible_names is None:
+        accessible_modules = json.loads(connection_row.get("accessible_modules") or "[]")
+        accessible_names = {
+            module.get("apiName")
+            for module in accessible_modules
+            if isinstance(module, dict) and module.get("apiName")
+        }
+    else:
+        accessible_names = {
+            str(name).strip()
+            for name in accessible_names
+            if str(name or "").strip()
+        }
     unauthorized = sorted(set(modules) - accessible_names)
     if unauthorized:
         raise PermissionError(
@@ -170,8 +182,9 @@ def validate_scan_config(payload: dict, connection_row: dict) -> dict:
     if depth not in SCAN_DEPTHS:
         raise ValueError("Unsupported scan depth")
 
+    clock_fields = SCAN_CLOCK_FIELDS if clock_fields is None else clock_fields
     clock = payload.get("clock")
-    if clock not in SCAN_CLOCK_FIELDS:
+    if clock not in clock_fields:
         raise ValueError("Clock must be 'created' or 'modified'")
 
     now_utc = datetime.now(timezone.utc)
@@ -179,7 +192,7 @@ def validate_scan_config(payload: dict, connection_row: dict) -> dict:
     return {
         "modules": modules,
         "depth": depth,
-        "clock_field": SCAN_CLOCK_FIELDS[clock],
+        "clock_field": clock_fields[clock],
         "range_id": payload["range"]["id"],
         "from_utc": from_utc,
         "to_utc": to_utc,

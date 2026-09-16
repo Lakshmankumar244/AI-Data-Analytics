@@ -1,6 +1,7 @@
 import { Menu } from "lucide-react";
 import { useAppState } from "../../state/AppContext";
 import { ContentContainer } from "./ContentContainer";
+import { ConnectionSwitcher } from "./ConnectionSwitcher";
 import { Button } from "@/components/ui/button";
 
 const TAB_LABELS = {
@@ -18,6 +19,8 @@ function contextFor(phase, tab) {
       return { kicker: "Workspace", title: "Restoring session" };
     case "home":
       return { kicker: "Workspace", title: "Reports" };
+    case "connect":
+      return { kicker: "Workspace", title: "Connect to CRM" };
     case "setup":
       return { kicker: "Scan", title: "Configure scan" };
     case "running":
@@ -31,16 +34,6 @@ function contextFor(phase, tab) {
   }
 }
 
-function connectionLabels(connection) {
-  if (!connection || connection === "loading") return null;
-  const organization =
-    connection.organizationName || connection.organizationId || null;
-  const user =
-    connection.connectedUser?.name || connection.connectedUser?.email || null;
-  if (!organization && !user) return null;
-  return { organization, user };
-}
-
 function scanMeta(phase, scan, scanConfig) {
   if (phase !== "report" && phase !== "running") return null;
   const depth = String(scan?.reportContext?.depth || scanConfig?.depth || "")
@@ -50,9 +43,8 @@ function scanMeta(phase, scan, scanConfig) {
 }
 
 export function AppHeader({ mobileOpen, setMobileOpen }) {
-  const { phase, tab, connection, scan, scanConfig } = useAppState();
+  const { phase, tab, scan, scanConfig } = useAppState();
   const context = contextFor(phase, tab);
-  const account = connectionLabels(connection);
   const meta = scanMeta(phase, scan, scanConfig);
 
   return (
@@ -86,24 +78,8 @@ export function AppHeader({ mobileOpen, setMobileOpen }) {
           </div>
         </div>
 
-        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end">
-          {account && (
-            <div
-              className="flex max-w-[min(280px,40cqi)] min-w-0 flex-col items-end gap-0.5 max-[760px]:hidden"
-              title={[account.organization, account.user].filter(Boolean).join(" · ")}
-            >
-              {account.organization && (
-                <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium text-ink">
-                  {account.organization}
-                </span>
-              )}
-              {account.user && (
-                <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[12px] text-ink-muted">
-                  {account.user}
-                </span>
-              )}
-            </div>
-          )}
+        <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-6">
+          <ConnectionSwitcher />
         </div>
       </ContentContainer>
     </header>

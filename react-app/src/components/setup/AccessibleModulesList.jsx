@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { formatNumber } from "../../utils/format";
 import { cn } from "@/lib/utils";
 
 function ChevronIcon({ open }) {
@@ -25,7 +24,7 @@ export default function AccessibleModulesList({ modules, selected, onToggle, onS
   const rootRef = useRef(null);
   const [open, setOpen] = useState(false);
   const selectedModules = new Set(selected);
-  const selectableModules = modules.filter((module) => Number(module.recordCount) > 0);
+  const selectableModules = modules;
   const selectedCount = selectableModules.filter((module) => selectedModules.has(module.apiName)).length;
   const allSelected = selectableModules.length > 0 && selectedCount === selectableModules.length;
   const someSelected = selectedCount > 0 && !allSelected;
@@ -106,34 +105,19 @@ export default function AccessibleModulesList({ modules, selected, onToggle, onS
             >
               {modules.map((module) => {
                 const checked = selected.includes(module.apiName);
-                const unavailable = Number(module.recordCount) <= 0;
                 return (
                   <li
                     key={module.apiName}
-                    className={cn(
-                      "flex items-center justify-between gap-3 px-3 py-3",
-                      unavailable && "opacity-50"
-                    )}
+                    className="flex items-center justify-between gap-3 px-3 py-3"
                   >
-                    <label
-                      className={cn(
-                        "flex min-w-0 items-center gap-2",
-                        unavailable ? "cursor-not-allowed" : "cursor-pointer"
-                      )}
-                    >
+                    <label className="flex min-w-0 cursor-pointer items-center gap-2">
                       <input
                         type="checkbox"
                         checked={checked}
-                        disabled={unavailable}
                         onChange={() => onToggle(module.apiName)}
                       />
                       <span className="font-medium">{module.label}</span>
                     </label>
-                    <span className="mono shrink-0 text-[13px] text-ink-muted">
-                      {unavailable
-                        ? "0 records"
-                        : `${formatNumber(module.recordCount)} records`}
-                    </span>
                   </li>
                 );
               })}

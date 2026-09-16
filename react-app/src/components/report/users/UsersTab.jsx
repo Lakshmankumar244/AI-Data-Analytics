@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useAppState } from "../../../state/AppContext";
-import { groupOwnerAnalytics } from "../../../data/ownerAnalytics";
+import { buildUserDetail, selectOwners } from "../../../data/userDetail";
 import UserQualityTable from "./UserQualityTable";
 import { recordsNeedingActionInsight } from "./usersModel";
 
@@ -23,13 +23,14 @@ export default function UsersTab() {
   const { scan, filterModules, filterUsers, scanConfig } = useAppState();
   const minRecords = scanConfig?.rules?.minRecordsPerUser ?? 25;
   const owners = useMemo(() => {
-    const grouped = groupOwnerAnalytics(scan?.moduleAnalytics ?? [], filterModules);
-    if (!filterUsers.length) return grouped;
-    const selected = new Set(filterUsers);
-    return grouped.filter((owner) => selected.has(owner.ownerKey));
+    const { owners: grouped } = buildUserDetail(
+      scan?.moduleAnalytics ?? [],
+      filterModules
+    );
+    return selectOwners(grouped, filterUsers);
   }, [filterModules, filterUsers, scan]);
   const hasOwnerAnalytics = useMemo(
-    () => groupOwnerAnalytics(scan?.moduleAnalytics ?? [], []).length > 0,
+    () => buildUserDetail(scan?.moduleAnalytics ?? []).owners.length > 0,
     [scan]
   );
   const insight = useMemo(

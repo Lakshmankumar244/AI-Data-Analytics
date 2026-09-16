@@ -1,6 +1,8 @@
-// Single entry point for backend data access. Features that have not yet
-// received a real backend implementation remain explicitly exported from
-// mockClient.js at the bottom of this file.
+import { buildScanEstimate } from "./scanEstimate";
+import { adaptAnalyticsResults } from "./analyticsAdapter";
+import { buildUserDetail } from "./userDetail";
+
+// Single entry point for backend data access.
 
 // Same-origin Catalyst function path. catalyst serve and hosted Catalyst both
 // expose Advanced I/O functions at /server/<function_name>, so this works
@@ -8,13 +10,20 @@
 const FUNCTION_BASE_URL = "/server/ai_data_analytics_function";
 
 export const ZOHO_CONSENT_URL = `${FUNCTION_BASE_URL}/api/zoho/consent`;
+export const SALESFORCE_CONSENT_URL = `${FUNCTION_BASE_URL}/api/salesforce/consent`;
 
-export async function getConnection({ refreshModules = false } = {}) {
-  const query = refreshModules ? "?refreshModules=1" : "";
-  const res = await fetch(`${FUNCTION_BASE_URL}/api/zoho/connection${query}`, {
+export async function getConnection() {
+  const res = await fetch(`${FUNCTION_BASE_URL}/api/zoho/connection`, {
     credentials: "same-origin",
   });
   return readJsonResponse(res, "getConnection");
+}
+
+export async function getSalesforceConnection() {
+  const res = await fetch(`${FUNCTION_BASE_URL}/api/salesforce/connection`, {
+    credentials: "same-origin",
+  });
+  return readJsonResponse(res, "getSalesforceConnection");
 }
 
 export async function activateConnection(connectionId) {
@@ -26,6 +35,24 @@ export async function activateConnection(connectionId) {
     }
   );
   return readJsonResponse(res, "activateConnection");
+}
+
+export async function activateSalesforceConnection(connectionId) {
+  const res = await fetch(
+    `${FUNCTION_BASE_URL}/api/salesforce/connections/${encodeURIComponent(connectionId)}/activate`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+    }
+  );
+  return readJsonResponse(res, "activateSalesforceConnection");
+}
+
+export async function activateCrmConnection(provider, connectionId) {
+  if (provider === "salesforce") {
+    return activateSalesforceConnection(connectionId);
+  }
+  return activateConnection(connectionId);
 }
 
 async function readJsonResponse(res, operation) {
@@ -112,6 +139,16 @@ export async function getScanResults(scanId) {
   return readJsonResponse(res, "getScanResults");
 }
 
+export async function getScorecard(scanId) {
+  const results = await getScanResults(scanId);
+  return adaptAnalyticsResults(results);
+}
+
+export async function getUserDetail(scanId, filterModules = []) {
+  const results = await getScanResults(scanId);
+  return buildUserDetail(results.modules ?? [], filterModules);
+}
+
 export async function getTrend(scanId, modules = []) {
   const query = new URLSearchParams();
   setListQueryParameter(query, "modules", modules);
@@ -147,8 +184,6 @@ export async function getFixPlan(scanId, modules = []) {
   return readJsonResponse(res, "getFixPlan");
 }
 
-export {
-  estimateScan,
-  getScorecard,
-  getUserDetail,
-} from "./mockClient";
+export function estimateScan(scopeConfig, accessibleModules = []) {
+  return buildScanEstimate(scopeConfig, accessibleModules);
+}

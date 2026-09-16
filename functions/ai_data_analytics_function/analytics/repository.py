@@ -1,6 +1,7 @@
 """Read-only Catalyst Data Store queries for analytics APIs."""
 
 from common.core import foreign_row_id
+from connections.repository import scan_crm_provider
 
 
 def _rows(zcql, query, table_name):
@@ -17,16 +18,18 @@ def find_owned_scan(zcql, scan_id, user_id):
     if not scan_rows:
         return None
 
+    scan_row = scan_rows[0]
+    table_name = (
+        "salesforce_connections"
+        if scan_crm_provider(scan_row) == "salesforce"
+        else "zoho_connections"
+    )
     safe_user_id = user_id.replace("'", "''")
     connection_rows = _rows(
         zcql,
-        f"select ROWID from zoho_connections where user_id = '{safe_user_id}'",
-        "zoho_connections",
+        f"select ROWID from {table_name} where user_id = '{safe_user_id}'",
+        table_name,
     )
-    if not connection_rows:
-        return None
-
-    scan_row = scan_rows[0]
     owned_connection_ids = {str(row["ROWID"]) for row in connection_rows}
     if str(foreign_row_id(scan_row.get("connection_row_id"))) not in owned_connection_ids:
         return None

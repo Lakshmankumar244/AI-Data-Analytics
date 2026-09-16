@@ -4,6 +4,7 @@ import * as api from "./data/client";
 import { AppShell as Shell, ContentContainer, MainContent } from "./components/layout";
 import ErrorState from "./components/shared/ErrorState";
 import SetupScreen from "./components/setup/SetupScreen";
+import ConnectScreen from "./components/setup/ConnectScreen";
 import RunningScreen from "./components/running/RunningScreen";
 import ReportShell from "./components/report/ReportShell";
 import HomeScreen from "./components/home/HomeScreen";
@@ -27,12 +28,16 @@ function AppShell() {
     const params = new URLSearchParams(window.location.hash.slice(1));
     const returningFromZoho = params.get("zoho_connected") === "1";
     const zohoError = params.get("zoho_error");
+    const returningFromSalesforce = params.get("salesforce_connected") === "1";
+    const salesforceError = params.get("salesforce_error");
 
     // OAuth callback markers are one-time signals. Removing them means a
     // later reload starts a new connection flow instead of restoring this one.
-    if (returningFromZoho || zohoError) {
+    if (returningFromZoho || zohoError || returningFromSalesforce || salesforceError) {
       params.delete("zoho_connected");
       params.delete("zoho_error");
+      params.delete("salesforce_connected");
+      params.delete("salesforce_error");
       const remainingHash = params.toString();
       window.history.replaceState(
         {},
@@ -50,11 +55,21 @@ function AppShell() {
       : returningFromZoho
       ? "Zoho CRM connection updated."
       : null;
+    const salesforceNotice = salesforceError
+      ? salesforceError === "SALESFORCE_CONSENT_DECLINED"
+        ? "Connection wasn't changed. You can try again anytime."
+        : "Salesforce connection failed. You can try again anytime."
+      : returningFromSalesforce
+      ? "Salesforce CRM connection updated."
+      : null;
 
     async function restoreSession() {
       try {
-        const connection = await api.getConnection();
-        const history = await api.getScanHistory();
+        const [connection, salesforceConnection, history] = await Promise.all([
+          api.getConnection(),
+          api.getSalesforceConnection().catch(() => null),
+          api.getScanHistory(),
+        ]);
         const scans = history?.scans ?? [];
         let resolved;
         try {
@@ -68,16 +83,21 @@ function AppShell() {
           }
         }
         if (cancelled) return;
+        if (returningFromSalesforce || salesforceError) {
+          resolved = { phase: "connect", urlRoute: { name: "connect" } };
+        }
         if (resolved.urlRoute) navigateTo(resolved.urlRoute, { replace: true });
         dispatchResolved(dispatch, resolved, {
           session: true,
           connection,
+          salesforceConnection,
           scans,
           notice:
             notice ||
             (connection?.legacyMigrated
               ? "Your previous development reports were migrated to this Catalyst account."
               : null),
+          salesforceNotice,
         });
       } catch (err) {
         if (cancelled) return;
@@ -135,6 +155,7 @@ function AppShell() {
     <Shell>
       <MainContent>
         {state.phase === "setup" && <SetupScreen />}
+        {state.phase === "connect" && <ConnectScreen />}
         {state.phase === "home" && <HomeScreen />}
         {state.phase === "running" && <RunningScreen />}
         {state.phase === "report" && <ReportShell />}

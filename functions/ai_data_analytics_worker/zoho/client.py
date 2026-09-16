@@ -285,27 +285,8 @@ def fetch_accessible_modules(access_token: str, api_domain: str = None) -> list:
     )
     resp.raise_for_status()
 
-    candidates = [
+    return [
         {"apiName": m["api_name"], "label": m.get("plural_label", m["api_name"])}
         for m in resp.json().get("modules", [])
         if m.get("api_supported") and m.get("visible", True)
     ]
-
-    def with_count(mod):
-        try:
-            mod["recordCount"] = fetch_record_count(access_token, api_domain, mod["apiName"])
-        except requests.RequestException as exc:
-            # Don't let one module's count call take down the whole
-            # connection attempt - default to 0 and keep going.
-            logger.warning("Could not fetch record count for %s: %s", mod["apiName"], exc)
-            mod["recordCount"] = 0
-        return mod
-
-    # Concurrent, not unlimited - capped so this doesn't hammer Zoho's rate
-    # limit. 5 is a reasonable starting point, not a number I've verified
-    # against Zoho's documented limit for your account tier - tune down if
-    # you start seeing 429s.
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        modules = list(pool.map(with_count, candidates))
-
-    return modules

@@ -43,11 +43,15 @@ export function persistScanConfig(scanConfig) {
 
 export function buildInitialState() {
   return {
-    phase: "boot", // boot | home | setup | running | report | error
+    phase: "boot", // boot | home | setup | connect | running | report | error
     connection: "loading",
+    salesforceConnection: "loading",
+    activeConnection: null,
+    activeConnectionKey: null,
     scanHistory: [],
     historyNeedsRefresh: false,
     connectionNotice: null, // soft, non-fatal message shown on the connect panel (e.g. consent declined)
+    salesforceNotice: null,
     scanConfig: loadPersistedScanConfig() ?? defaultScanConfig,
     progress: {}, // module api_name -> { scanned, estimatedTotal, phase }
     completedModules: [],

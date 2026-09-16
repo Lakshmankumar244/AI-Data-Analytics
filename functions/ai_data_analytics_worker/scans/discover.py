@@ -13,35 +13,18 @@ from common.core import (
     RULE_VERSION,
     canonical_hash,
     json_response,
-    to_zoho_datetime,
 )
 from connections.access import resolve_action_connection
 from connections.token import get_connection_access_token
 from zoho.client import (
-    build_count_criteria,
     build_field_allowlist,
     build_field_metadata,
     fetch_module_fields,
     fetch_organization_metadata,
-    fetch_record_count,
 )
 from zoho.user_directory import sync_connection_user_directory
 
 logger = logging.getLogger(__name__)
-
-
-def _scope_conditions_from_scan_row(scan_row):
-    conditions = []
-    clock_field = scan_row["clock_field"]
-    from_utc = scan_row.get("from_utc")
-    if from_utc:
-        conditions.append(
-            (clock_field, "greater_equal", to_zoho_datetime(from_utc))
-        )
-    conditions.append(
-        (clock_field, "less_than", to_zoho_datetime(scan_row["to_utc"]))
-    )
-    return conditions
 
 
 def discover_scan(request: Request, datastore, scan_id: str, connection_row=None):
@@ -110,7 +93,6 @@ def discover_scan(request: Request, datastore, scan_id: str, connection_row=None
 
         discovered_modules = []
         field_plan_hashes = {}
-        count_criteria = build_count_criteria(_scope_conditions_from_scan_row(scan_row))
         for result in module_rows:
             module_row = result["scan_module_runs"]
             module_api_name = module_row["module_api_name"]
@@ -125,20 +107,6 @@ def discover_scan(request: Request, datastore, scan_id: str, connection_row=None
                     "fieldMetadata": field_metadata,
                 }
             )
-            try:
-                expected_record_count = fetch_record_count(
-                    access_token,
-                    api_domain,
-                    module_api_name,
-                    count_criteria,
-                )
-            except Exception as exc:  # noqa: BLE001 - keep the count captured at scan create
-                logger.warning(
-                    "Could not refresh live record count for %s: %s",
-                    module_api_name,
-                    exc,
-                )
-                expected_record_count = int(module_row.get("expected_record_count") or 0)
             module_table.update_row(
                 {
                     "ROWID": module_row["ROWID"],
@@ -148,7 +116,6 @@ def discover_scan(request: Request, datastore, scan_id: str, connection_row=None
                     ),
                     "field_plan_hash": plan_hash,
                     "status": "PLANNED",
-                    "expected_record_count": expected_record_count,
                 }
             )
             field_plan_hashes[module_api_name] = plan_hash

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppState } from "../../state/AppContext";
-import { adaptAnalyticsResults } from "../../data/analyticsAdapter";
-import { activateConnection, deleteScan, getScanHistory, getScanResults, ZOHO_CONSENT_URL } from "../../data/client";
+import { activateConnection, deleteScan, getScanHistory, getScorecard, ZOHO_CONSENT_URL } from "../../data/client";
+import { connectionSummary, providerLabel } from "../../data/activeConnection";
 import { Trash2 } from "lucide-react";
 import { formatNumber, formatReportPeriod, formatScanTimestamp } from "../../utils/format";
 import { cn } from "@/lib/utils";
@@ -150,7 +150,8 @@ function ScanActions({
 }
 
 export default function HomeScreen() {
-  const { connection, scanHistory, connectionNotice, historyNeedsRefresh } = useAppState();
+  const { connection, activeConnection, scanHistory, connectionNotice, historyNeedsRefresh } =
+    useAppState();
   const dispatch = useAppDispatch();
   const [openingScanId, setOpeningScanId] = useState(null);
   const [scanToDelete, setScanToDelete] = useState(null);
@@ -208,11 +209,11 @@ export default function HomeScreen() {
     setOpeningScanId(scan.scanId);
     setError(null);
     try {
-      const results = await getScanResults(scan.scanId);
+      const scorecard = await getScorecard(scan.scanId);
       dispatch({
         type: "scanComplete",
         scanId: scan.scanId,
-        scan: { ...adaptAnalyticsResults(results), reportContext: scan },
+        scan: { ...scorecard, reportContext: scan },
         refreshHistory: false,
       });
     } catch (err) {
@@ -276,7 +277,11 @@ export default function HomeScreen() {
     setError(null);
     try {
       const selected = await activateConnection(connectionId);
-      dispatch({ type: "connectionLoaded", connection: selected });
+      dispatch({
+        type: "connectionLoaded",
+        connection: selected,
+        activeConnectionKey: `zoho:${selected?.connectionId || connectionId}`,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "The Zoho account could not be selected");
     } finally {
@@ -292,8 +297,10 @@ export default function HomeScreen() {
     );
   }
 
+  const zohoActive = activeConnection?.provider === "zoho";
+  const salesforceActive = activeConnection?.provider === "salesforce";
   const organizationName = connection?.organizationName || "Zoho CRM";
-  const latestScan = connection
+  const latestScan = zohoActive && connection
     ? scanHistory.find(
         (scan) => scan.connection?.connectionId === connection.connectionId
       ) ?? null
@@ -304,11 +311,14 @@ export default function HomeScreen() {
   const latestClock = latestScan ? clockLabel(latestScan.clock) : null;
   const latestActionIsPrimary =
     latestScan && (canOpenScan(latestScan) || canResumeScan(latestScan));
+  const salesforceSummary = salesforceActive
+    ? connectionSummary(activeConnection)
+    : "";
 
   return (
     <>
     <ContentContainer className="pb-10 pt-6 @min-[640px]:pt-8">
-      {connection ? (
+      {zohoActive && connection ? (
         <div className="mb-8 flex min-w-0 flex-wrap items-end justify-end gap-x-3 gap-y-2">
           {connection.availableConnections?.length > 1 && (
             <Dropdown
@@ -343,6 +353,23 @@ export default function HomeScreen() {
             </Button>
           </div>
         </div>
+      ) : salesforceActive ? (
+        <PageHeader
+          eyebrow={providerLabel("salesforce")}
+          title="Salesforce scanning is not available yet"
+          description="Salesforce is the active connection. Scan setup for Salesforce is not implemented yet, so new scans cannot be started from this workspace. Switch back to a Zoho CRM connection to run scans, or connect another CRM."
+          meta={salesforceSummary || undefined}
+          actions={
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={() => dispatch({ type: "showConnect" })}
+            >
+              Connect to CRM
+            </Button>
+          }
+        />
       ) : (
         <PageHeader
           title="Reports"
@@ -351,7 +378,7 @@ export default function HomeScreen() {
             <Button
               type="button"
               size="lg"
-              onClick={() => dispatch({ type: "showSetup" })}
+              onClick={() => dispatch({ type: "showConnect" })}
             >
               Connect Zoho CRM
             </Button>
@@ -372,7 +399,7 @@ export default function HomeScreen() {
         </div>
       )}
 
-      {connection && (
+      {zohoActive && connection && (
         <section
           className="mb-10 border-b border-line pb-8"
           aria-labelledby="latest-scan-heading"

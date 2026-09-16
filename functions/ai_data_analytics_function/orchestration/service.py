@@ -21,6 +21,7 @@ from orchestration.choose import choose_action, orchestrate_owns_scan
 from orchestration.repository import load_scan_state
 from pipeline.orchestrate_enqueue import enqueue_orchestrate_scan
 from pipeline.task_routes import enqueue_prepare_batches, enqueue_process_batches
+from connections.repository import scan_crm_provider
 from scans.discover import discover_scan
 
 
@@ -135,6 +136,17 @@ def advance_scan(request, datastore, scan_id):
             return json_response(
                 {"error": {"code": "SCAN_NOT_FOUND", "message": "Scan was not found"}},
                 404,
+            )
+
+        if scan_crm_provider(state["scan"]) == "salesforce":
+            return json_response(
+                {
+                    "error": {
+                        "code": "SALESFORCE_EXTRACTION_NOT_IMPLEMENTED",
+                        "message": "Salesforce scan extraction is not implemented yet",
+                    }
+                },
+                409,
             )
 
         action = choose_action(state)
