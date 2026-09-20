@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FUNCTIONS_ROOT = ROOT / "functions"
 SHARED_SOURCE = FUNCTIONS_ROOT / "_shared" / "worker"
 SHARED_SALESFORCE = FUNCTIONS_ROOT / "_shared" / "salesforce"
+SHARED_ZOHO_ROOT = FUNCTIONS_ROOT / "_shared"
 ZOHO_WORKER = FUNCTIONS_ROOT / "ai_data_analytics_worker"
 SF_WORKER = FUNCTIONS_ROOT / "ai_data_analytics_salesforce_worker"
 HTTP_FUNCTION = FUNCTIONS_ROOT / "ai_data_analytics_function"
@@ -30,6 +31,22 @@ SHARED_SALESFORCE_FILES = (
     "bulk_query.py",
     "bulk_results.py",
     "owner_resolution.py",
+)
+SHARED_ZOHO_FILES = (
+    ("zoho", ("client.py", "user_directory.py")),
+    (
+        "bulk_read",
+        (
+            "prepare.py",
+            "submit.py",
+            "status.py",
+            "download.py",
+            "request_builder.py",
+        ),
+    ),
+    ("connections", ("token.py", "access.py")),
+    ("orchestration", ("choose.py",)),
+    ("common", ("profiler.py",)),
 )
 
 
@@ -268,6 +285,91 @@ class SharedSalesforcePackagingTests(unittest.TestCase):
 
     def test_salesforce_worker_imports_shared_salesforce_modules(self):
         _assert_salesforce_modules_import(SF_WORKER)
+
+
+def _assert_zoho_modules_import(function_root):
+    script = r"""
+import importlib
+import sys
+import types
+from pathlib import Path
+
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root))
+if "flask" not in sys.modules:
+    flask = types.ModuleType("flask")
+    flask.Request = type("Request", (), {})
+    flask.make_response = lambda *args, **kwargs: None
+    flask.redirect = lambda *args, **kwargs: None
+    sys.modules["flask"] = flask
+if "zcatalyst_sdk" not in sys.modules:
+    stub = types.ModuleType("zcatalyst_sdk")
+    stub.initialize = lambda: None
+    sys.modules["zcatalyst_sdk"] = stub
+for name in (
+    "zoho.client",
+    "zoho.user_directory",
+    "bulk_read.prepare",
+    "bulk_read.submit",
+    "bulk_read.status",
+    "bulk_read.download",
+    "bulk_read.request_builder",
+    "connections.token",
+    "connections.access",
+    "orchestration.choose",
+    "common.profiler",
+):
+    module = importlib.import_module(name)
+    assert module is sys.modules[name]
+print("ok")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(function_root)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(
+            f"Zoho shared import failed for {function_root.name}:\n"
+            f"{result.stdout}\n{result.stderr}"
+        )
+    if "ok" not in result.stdout:
+        raise AssertionError(result.stdout + result.stderr)
+
+
+class SharedZohoPackagingTests(unittest.TestCase):
+    def test_packaged_zoho_modules_match_shared_source(self):
+        for dest in (HTTP_FUNCTION, ZOHO_WORKER):
+            for package, names in SHARED_ZOHO_FILES:
+                for name in names:
+                    source = (SHARED_ZOHO_ROOT / package / name).read_bytes()
+                    copy = (dest / package / name).read_bytes()
+                    self.assertEqual(source, copy, f"{dest.name}/{package}/{name}")
+
+    def test_salesforce_worker_does_not_receive_zoho_shared_modules(self):
+        for package, names in SHARED_ZOHO_FILES:
+            for name in names:
+                self.assertFalse((SF_WORKER / package / name).exists())
+                self.assertFalse((SF_WORKER / "shared" / package / name).exists())
+                self.assertFalse((SF_WORKER / name).exists())
+
+    def test_shared_zoho_init_files_are_not_copied_into_deploy_trees(self):
+        http_zoho_init = (HTTP_FUNCTION / "zoho" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        shared_zoho_init = (SHARED_ZOHO_ROOT / "zoho" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotEqual(http_zoho_init, shared_zoho_init)
+        self.assertFalse((SF_WORKER / "zoho").exists())
+        self.assertFalse((SF_WORKER / "bulk_read").exists())
+
+    def test_http_function_imports_shared_zoho_modules(self):
+        _assert_zoho_modules_import(HTTP_FUNCTION)
+
+    def test_zoho_worker_imports_shared_zoho_modules(self):
+        _assert_zoho_modules_import(ZOHO_WORKER)
 
 
 if __name__ == "__main__":

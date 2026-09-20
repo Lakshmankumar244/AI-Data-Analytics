@@ -330,7 +330,7 @@ def _enrich_record_names(datastore, zcql, scan_row, records):
         return records
 
     try:
-        from connections.routes import get_connection_access_token
+        from connections.token import get_connection_access_token
         from zoho.client import fetch_record_names
 
         access_token, api_domain, _refreshed = get_connection_access_token(
