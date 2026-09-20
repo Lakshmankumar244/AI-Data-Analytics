@@ -19,8 +19,7 @@ Columns:
 
 Do not write to zoho_connection_users.
 
-Worker copy: scan discover later will need this module (or a worker-side copy,
-matching zoho/user_directory.py). Not added in this increment.
+Worker copy: also lives in ai_data_analytics_salesforce_worker/salesforce/user_directory.py.
 
 15→18 character Ids: Salesforce REST/SOQL normally returns 18-character Ids.
 This module does not convert 15-character Ids; it stores the value returned.
@@ -36,9 +35,24 @@ import requests
 logger = logging.getLogger(__name__)
 
 SALESFORCE_DIRECTORY_TABLE = "salesforce_connection_owners"
+SF_OWNER_DIR_LOG = "SF_OWNER_DIR"
+KNOWN_TRACE_OWNER_ID = "005dN00000DvlIrQAJ"
+_SECRET_RE = re.compile(
+    r"(?i)(?:bearer\s+)[^\s]+|"
+    r"(?:access_token|refresh_token|client_secret|authorization)\s*[:=]\s*[^&\s]+"
+)
 SALESFORCE_USER_QUERY = "SELECT Id, Name, Email, IsActive, Username FROM User"
+SALESFORCE_USER_QUERIES = (
+    SALESFORCE_USER_QUERY,
+    "SELECT Id, Name, IsActive FROM User",
+    "SELECT Id, Name FROM User",
+)
 SALESFORCE_GROUP_QUERY = (
     "SELECT Id, Name, Type, Email FROM Group WHERE Type IN ('Queue', 'Regular')"
+)
+SALESFORCE_GROUP_QUERIES = (
+    SALESFORCE_GROUP_QUERY,
+    "SELECT Id, Name, Type FROM Group WHERE Type IN ('Queue', 'Regular')",
 )
 MAX_QUERY_PAGES = 50
 _SALESFORCE_ID = re.compile(r"^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$")
@@ -49,8 +63,72 @@ def is_salesforce_record_id(value: str) -> bool:
     return bool(value and _SALESFORCE_ID.fullmatch(value))
 
 
+def _redact_secrets(value):
+    return _SECRET_RE.sub("[redacted]", str(value or ""))
+
+
+def _safe_error_summary(exc):
+    """Data Store / HTTP error code and message only; never tokens."""
+    parts = [type(exc).__name__]
+    code = getattr(exc, "code", None)
+    message = getattr(exc, "message", None)
+    if code:
+        parts.append(f"code={_redact_secrets(code)}")
+    if message:
+        parts.append(f"message={_redact_secrets(message)[:500]}")
+    elif not code:
+        parts.append(_redact_secrets(exc)[:500])
+    status = getattr(exc, "status_code", None) or getattr(exc, "http_status_code", None)
+    if status:
+        parts.append(f"status={status}")
+    response = getattr(exc, "response", None)
+    if response is not None:
+        http_status = getattr(response, "status_code", None)
+        if http_status:
+            parts.append(f"http_status={http_status}")
+        body = None
+        try:
+            body = response.json()
+        except Exception:  # noqa: BLE001 - diagnostic body parse is best-effort
+            body = None
+        if isinstance(body, list) and body:
+            body = body[0]
+        if isinstance(body, dict):
+            data = body.get("data") if isinstance(body.get("data"), dict) else {}
+            err = (
+                body.get("errorCode")
+                or body.get("error_code")
+                or body.get("code")
+                or data.get("error_code")
+                or data.get("errorCode")
+                or data.get("code")
+            )
+            detail = (
+                body.get("message")
+                or data.get("message")
+                or data.get("error_msg")
+            )
+            if err:
+                parts.append(f"code={_redact_secrets(err)}")
+            if detail:
+                parts.append(f"message={_redact_secrets(detail)[:300]}")
+        elif getattr(response, "text", None):
+            parts.append(_redact_secrets(response.text)[:300])
+    return " | ".join(str(part) for part in parts if part)
+
+
 def _is_true(value):
-    return value is True or str(value).strip().lower() == "true"
+    if value is True or value is False:
+        return value is True
+    return str(value or "").strip().lower() in {"true", "1", "yes", "t"}
+
+
+def _connection_row_id(connection_row):
+    """Match Zoho's foreign_row_id unwrap of Catalyst ROWID values."""
+    value = (connection_row or {}).get("ROWID")
+    if isinstance(value, dict):
+        value = value.get("ROWID") or value.get("rowid")
+    return str(value or "").strip()
 
 
 def _trimmed(value, limit=255):
@@ -76,12 +154,16 @@ def normalize_salesforce_user(record: dict):
     if not is_salesforce_record_id(crm_user_id):
         return None
     display_name = _trimmed(record.get("Name")) or "Unknown user"
+    if "IsActive" in record:
+        active = _is_true(record.get("IsActive"))
+    else:
+        active = True
     return {
         "crmUserId": crm_user_id,
         "displayName": display_name,
         "email": _trimmed(record.get("Email")),
         "username": _trimmed(record.get("Username")),
-        "active": record.get("IsActive") is True,
+        "active": active,
         "type": "user",
     }
 
@@ -118,7 +200,7 @@ def build_salesforce_directory_row(connection_row_id: str, entry: dict, synced_a
         "display_name": _trimmed(entry.get("displayName")) or "Unknown owner",
         "email": _trimmed(entry.get("email")),
         "username": _trimmed(entry.get("username")),
-        "active": entry.get("active") is True,
+        "active": _is_true(entry.get("active")),
         "owner_type": str(entry.get("type") or "").strip(),
         "synced_at": synced_at,
     }
@@ -144,6 +226,8 @@ def upsert_salesforce_directory_entries(
     seen = set()
     inserted = 0
     updated = 0
+    attempted = 0
+    failed = 0
     for entry in entries:
         if not isinstance(entry, dict) or not entry.get("crmUserId"):
             continue
@@ -157,13 +241,28 @@ def upsert_salesforce_directory_entries(
             continue
         seen.add(key)
         existing = existing_by_key.get(key)
-        if existing:
-            row_data["ROWID"] = existing["ROWID"]
-            table.update_row(row_data)
-            updated += 1
-        else:
-            table.insert_row(row_data)
-            inserted += 1
+        operation = "update" if existing else "insert"
+        attempted += 1
+        try:
+            if existing:
+                row_data["ROWID"] = existing["ROWID"]
+                table.update_row(row_data)
+                updated += 1
+            else:
+                table.insert_row(row_data)
+                inserted += 1
+        except Exception as exc:  # noqa: BLE001 - keep other owners even if one row fails
+            failed += 1
+            logger.error(
+                "%s persist_row_failed connection_row_id=%s op=%s "
+                "crm_user_id=%s directory_key=%s error=%s",
+                SF_OWNER_DIR_LOG,
+                connection_row_id,
+                operation,
+                row_data.get("crm_user_id"),
+                key,
+                _safe_error_summary(exc),
+            )
 
     inactivated = 0
     for key, row in existing_by_key.items():
@@ -187,6 +286,8 @@ def upsert_salesforce_directory_entries(
         "updated": updated,
         "inactivated": inactivated,
         "seen": len(seen),
+        "attempted": attempted,
+        "failed": failed,
     }
 
 
@@ -238,10 +339,37 @@ def fetch_salesforce_soql_records(access_token: str, instance_url: str, soql: st
     return records, pages
 
 
+def _fetch_soql_with_fallback(access_token: str, instance_url: str, queries):
+    last_error = None
+    for soql in queries:
+        try:
+            records, pages = fetch_salesforce_soql_records(access_token, instance_url, soql)
+            logger.info(
+                "%s soql_ok records=%s pages=%s soql=%s",
+                SF_OWNER_DIR_LOG,
+                len(records),
+                pages,
+                soql,
+            )
+            return records, pages
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            logger.warning(
+                "%s soql_failed soql=%s error=%s",
+                SF_OWNER_DIR_LOG,
+                soql,
+                _safe_error_summary(exc),
+            )
+            last_error = exc
+    if last_error is None:
+        raise ValueError("Salesforce directory query is not configured")
+    raise last_error
+
+
 def fetch_salesforce_users(access_token: str, instance_url: str):
-    records, pages = fetch_salesforce_soql_records(
-        access_token, instance_url, SALESFORCE_USER_QUERY
+    records, pages = _fetch_soql_with_fallback(
+        access_token, instance_url, SALESFORCE_USER_QUERIES
     )
+    logger.info("%s user_query_count=%s", SF_OWNER_DIR_LOG, len(records))
     entries = []
     for record in records:
         entry = normalize_salesforce_user(record)
@@ -251,9 +379,10 @@ def fetch_salesforce_users(access_token: str, instance_url: str):
 
 
 def fetch_salesforce_groups(access_token: str, instance_url: str):
-    records, pages = fetch_salesforce_soql_records(
-        access_token, instance_url, SALESFORCE_GROUP_QUERY
+    records, pages = _fetch_soql_with_fallback(
+        access_token, instance_url, SALESFORCE_GROUP_QUERIES
     )
+    logger.info("%s group_query_count=%s", SF_OWNER_DIR_LOG, len(records))
     entries = []
     for record in records:
         entry = normalize_salesforce_group(record)
@@ -268,8 +397,13 @@ def _load_existing_directory_rows(zcql, connection_row_id: str):
         f"connection_row_id = {connection_row_id}"
     )
     rows = []
-    for item in results:
-        row = item.get(SALESFORCE_DIRECTORY_TABLE) if isinstance(item, dict) else None
+    for item in results or []:
+        if not isinstance(item, dict):
+            continue
+        row = item.get(SALESFORCE_DIRECTORY_TABLE)
+        if not isinstance(row, dict) and len(item) == 1:
+            candidate = next(iter(item.values()))
+            row = candidate if isinstance(candidate, dict) else None
         if isinstance(row, dict):
             rows.append(row)
     return rows
@@ -279,8 +413,18 @@ def sync_salesforce_owner_directory(
     datastore, zcql, connection_row: dict, access_token: str, instance_url: str, now=None
 ):
     """Fetch Users + Groups/Queues and upsert into salesforce_connection_owners."""
-    connection_row_id = str(connection_row.get("ROWID") or "").strip()
+    connection_row_id = _connection_row_id(connection_row)
+    logger.info(
+        "%s sync_enter connection_row_id=%s",
+        SF_OWNER_DIR_LOG,
+        connection_row_id or "<empty>",
+    )
     if not connection_row_id.isdigit():
+        logger.warning(
+            "%s sync_skip invalid_connection_row_id=%s",
+            SF_OWNER_DIR_LOG,
+            connection_row_id or "<empty>",
+        )
         return {
             "refreshed": False,
             "apiCalls": 0,
@@ -288,45 +432,81 @@ def sync_salesforce_owner_directory(
             "warning": "Connection identifier is invalid for directory caching",
         }
 
+    warnings = []
     try:
         existing_rows = _load_existing_directory_rows(zcql, connection_row_id)
-    except Exception as exc:  # noqa: BLE001 - table may not exist yet
-        logger.exception("Could not read Salesforce owner directory cache: %s", exc)
-        return {
-            "refreshed": False,
-            "apiCalls": 0,
-            "counts": {"user": 0, "queue": 0, "group": 0},
-            "warning": "Salesforce owner directory cache could not be read",
-        }
+        logger.info(
+            "%s cache_read_count=%s connection_row_id=%s",
+            SF_OWNER_DIR_LOG,
+            len(existing_rows),
+            connection_row_id,
+        )
+    except Exception as exc:  # noqa: BLE001 - still fetch and insert when cache read fails
+        logger.error(
+            "%s cache_read_failed connection_row_id=%s error=%s",
+            SF_OWNER_DIR_LOG,
+            connection_row_id,
+            _safe_error_summary(exc),
+        )
+        existing_rows = []
+        warnings.append("Salesforce owner directory cache could not be read")
 
     api_calls = 0
     fetched = []
     managed_types = set()
-    warnings = []
+    user_query_count = 0
+    group_query_count = 0
 
     try:
         users, user_pages = fetch_salesforce_users(access_token, instance_url)
         api_calls += user_pages
+        user_query_count = len(users)
         fetched.extend(users)
         managed_types.add("user")
     except (requests.RequestException, ValueError, TypeError) as exc:
         logger.warning(
-            "Salesforce User directory request failed: %s", type(exc).__name__
+            "%s user_query_failed connection_row_id=%s error=%s",
+            SF_OWNER_DIR_LOG,
+            connection_row_id,
+            _safe_error_summary(exc),
         )
         warnings.append("Salesforce User directory request failed")
 
     try:
         groups, group_pages = fetch_salesforce_groups(access_token, instance_url)
         api_calls += group_pages
+        group_query_count = len(groups)
         fetched.extend(groups)
         managed_types.update({"queue", "group"})
     except (requests.RequestException, ValueError, TypeError) as exc:
         logger.warning(
-            "Salesforce Group directory request failed: %s", type(exc).__name__
+            "%s group_query_failed connection_row_id=%s error=%s",
+            SF_OWNER_DIR_LOG,
+            connection_row_id,
+            _safe_error_summary(exc),
         )
         warnings.append("Salesforce Group directory request failed")
 
+    known_owner_present = any(
+        str(entry.get("crmUserId") or "") == KNOWN_TRACE_OWNER_ID for entry in fetched
+    )
+    logger.info(
+        "%s normalized_owner_count=%s user_normalized_count=%s "
+        "group_normalized_count=%s known_owner_present=%s connection_row_id=%s",
+        SF_OWNER_DIR_LOG,
+        len(fetched),
+        user_query_count,
+        group_query_count,
+        str(known_owner_present).lower(),
+        connection_row_id,
+    )
+
     if not managed_types:
+        logger.warning(
+            "%s persist_skip no_directory_records connection_row_id=%s",
+            SF_OWNER_DIR_LOG,
+            connection_row_id,
+        )
         return {
             "refreshed": False,
             "apiCalls": api_calls,
@@ -335,9 +515,17 @@ def sync_salesforce_owner_directory(
         }
 
     synced_at = _synced_at(now)
+    persist = {
+        "inserted": 0,
+        "updated": 0,
+        "inactivated": 0,
+        "seen": 0,
+        "attempted": 0,
+        "failed": 0,
+    }
     try:
         table = datastore.table(SALESFORCE_DIRECTORY_TABLE)
-        upsert_salesforce_directory_entries(
+        persist = upsert_salesforce_directory_entries(
             table,
             existing_rows,
             fetched,
@@ -346,7 +534,13 @@ def sync_salesforce_owner_directory(
             managed_types=managed_types,
         )
     except Exception as exc:  # noqa: BLE001 - keep discovery usable without cache
-        logger.exception("Could not persist Salesforce owner directory cache: %s", exc)
+        logger.error(
+            "%s persist_table_failed connection_row_id=%s table=%s error=%s",
+            SF_OWNER_DIR_LOG,
+            connection_row_id,
+            SALESFORCE_DIRECTORY_TABLE,
+            _safe_error_summary(exc),
+        )
         return {
             "refreshed": False,
             "apiCalls": api_calls,
@@ -354,14 +548,51 @@ def sync_salesforce_owner_directory(
             "warning": "Salesforce owner directory cache could not be stored",
         }
 
+    logger.info(
+        "%s persist_attempts=%s inserted=%s updated=%s failed=%s connection_row_id=%s",
+        SF_OWNER_DIR_LOG,
+        persist.get("attempted") or 0,
+        persist.get("inserted") or 0,
+        persist.get("updated") or 0,
+        persist.get("failed") or 0,
+        connection_row_id,
+    )
+
+    persisted_count = "unreadable"
+    try:
+        persisted_count = len(_load_existing_directory_rows(zcql, connection_row_id))
+    except Exception as exc:  # noqa: BLE001 - count is diagnostic only
+        logger.error(
+            "%s persisted_row_count_failed connection_row_id=%s error=%s",
+            SF_OWNER_DIR_LOG,
+            connection_row_id,
+            _safe_error_summary(exc),
+        )
+    logger.info(
+        "%s persisted_row_count=%s connection_row_id=%s",
+        SF_OWNER_DIR_LOG,
+        persisted_count,
+        connection_row_id,
+    )
+
     counts = {"user": 0, "queue": 0, "group": 0}
     for entry in fetched:
         kind = entry.get("type")
         if kind in counts:
             counts[kind] += 1
 
+    stored = int(persist.get("inserted") or 0) + int(persist.get("updated") or 0)
+    if fetched and stored == 0:
+        warnings.append("Salesforce owner directory cache could not be stored")
+        return {
+            "refreshed": False,
+            "apiCalls": api_calls,
+            "counts": counts,
+            "warning": "; ".join(warnings),
+        }
+
     return {
-        "refreshed": True,
+        "refreshed": stored > 0 or not fetched,
         "apiCalls": api_calls,
         "counts": counts,
         "warning": "; ".join(warnings) if warnings else None,
@@ -428,6 +659,7 @@ def get_salesforce_owner_directory(request, datastore):
             502
             if "could not be read" in str(result["warning"])
             or "request failed" in str(result["warning"])
+            or "could not be stored" in str(result["warning"])
             else 200
         )
         if status == 502:

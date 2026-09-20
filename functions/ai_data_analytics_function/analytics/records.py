@@ -15,6 +15,13 @@ from common.core import (
     json_response,
     query_list_values,
 )
+from connections.repository import scan_crm_provider
+from salesforce.owner_resolution import (
+    ensure_salesforce_owner_directory,
+    load_salesforce_connection_row,
+    load_salesforce_owner_directory,
+)
+from salesforce.user_directory import is_salesforce_record_id
 
 
 LOGGER = logging.getLogger(__name__)
@@ -139,6 +146,8 @@ def _owner_names(zcql, scan_row):
     connection_row_id = str(foreign_row_id(scan_row.get("connection_row_id")) or "")
     if not connection_row_id.isdigit():
         return {}
+    if scan_crm_provider(scan_row) == "salesforce":
+        return load_salesforce_owner_directory(zcql, connection_row_id)
     try:
         rows = _rows(
             zcql,
@@ -258,6 +267,14 @@ def _connection_row(zcql, scan_row):
     connection_id = str(foreign_row_id(scan_row.get("connection_row_id")) or "")
     if not connection_id.isdigit():
         return None
+    if scan_crm_provider(scan_row) == "salesforce":
+        rows = _rows(
+            zcql,
+            "select * from salesforce_connections where "
+            f"ROWID = {connection_id} limit 1",
+            "salesforce_connections",
+        )
+        return rows[0] if rows else None
     rows = _rows(
         zcql,
         f"select * from zoho_connections where ROWID = {connection_id} limit 1",
@@ -268,7 +285,11 @@ def _connection_row(zcql, scan_row):
 
 def _safe_crm_record_id(value):
     candidate = str(value or "").strip()
-    return candidate if candidate.isdigit() and len(candidate) <= 32 else ""
+    if candidate.isdigit() and len(candidate) <= 32:
+        return candidate
+    if is_salesforce_record_id(candidate):
+        return candidate
+    return ""
 
 
 def _is_module_name(value, module_api_name):
@@ -293,6 +314,11 @@ def _enrich_record_names(datastore, zcql, scan_row, records):
         if not record.get("recordName") and record.get("crmRecordId")
     ]
     if not missing:
+        for record in records:
+            record.pop("crmRecordId", None)
+        return records
+
+    if scan_crm_provider(scan_row) == "salesforce":
         for record in records:
             record.pop("crmRecordId", None)
         return records
@@ -354,6 +380,13 @@ def get_record_findings(request, datastore, scan_id):
                 {"error": {"code": "SCAN_NOT_FOUND", "message": "Scan was not found"}},
                 404,
             )
+
+        if scan_crm_provider(scan_row) == "salesforce":
+            connection = load_salesforce_connection_row(zcql, scan_row)
+            if connection is not None:
+                ensure_salesforce_owner_directory(
+                    datastore, zcql, connection, refresh=False
+                )
 
         try:
             page = int(request.args.get("page", "1"))

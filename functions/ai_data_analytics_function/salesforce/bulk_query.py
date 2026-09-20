@@ -169,6 +169,7 @@ def normalize_salesforce_query_job(payload: dict) -> dict:
     )
     locator = payload.get("locator")
     locator_text = str(locator).strip() if locator not in (None, "") else None
+    error_message = str(payload.get("errorMessage") or "").strip() or None
     return {
         "id": job_id,
         "state": state,
@@ -179,13 +180,18 @@ def normalize_salesforce_query_job(payload: dict) -> dict:
         "numberRecordsFailed": failed,
         "totalSize": total_size,
         "locator": locator_text,
+        "errorMessage": error_message,
         "resultsAvailable": state == "JobComplete",
         "locatorAvailable": bool(locator_text),
     }
 
 
 def persist_salesforce_query_job(datastore, job: dict, bulk_row=None):
-    """Store provider_job_id on bulk_read_jobs. Never writes zoho_job_id."""
+    """Store provider_job_id and mapped status on bulk_read_jobs.
+
+    Salesforce job.state maps into the existing status column, matching Zoho.
+    Does not write provider_status or zoho_job_id.
+    """
     if not isinstance(job, dict) or not job.get("id"):
         raise SalesforceBulkError(
             "SALESFORCE_JOB_RESPONSE_INVALID",

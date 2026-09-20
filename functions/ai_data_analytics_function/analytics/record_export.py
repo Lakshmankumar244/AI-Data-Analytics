@@ -10,10 +10,12 @@ import csv
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import tempfile
 import zipfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
@@ -21,6 +23,7 @@ import zcatalyst_sdk
 
 from analytics.repository import find_bulk_jobs, find_module_runs
 from common.core import canonical_hash
+from salesforce.owner_resolution import owner_field_name, resolve_owner_identity
 
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -64,6 +67,7 @@ PRESALES_BUSINESS_FIELDS = {
     ),
 }
 UNNAMED_RECORD = "Unnamed record"
+LOGGER = logging.getLogger(__name__)
 
 
 def _validator_kind(field_name):
@@ -265,34 +269,11 @@ def _record_display_name(fields):
 
 
 def _owner_identity(raw_value, owner_directory):
-    value = "" if raw_value is None else str(raw_value).strip()
-    owner_id = ""
-    owner_name = ""
-    if value:
-        try:
-            decoded = json.loads(value)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            decoded = None
-        if isinstance(decoded, dict):
-            owner_id = str(decoded.get("id") or decoded.get("zuid") or "").strip()
-            owner_name = str(decoded.get("name") or decoded.get("full_name") or "").strip()
-        elif value.isdigit():
-            owner_id = value
-        else:
-            owner_name = value
-    if not owner_id and not owner_name:
-        owner_name = "Unassigned"
-        owner_key = canonical_hash({"owner_state": "unassigned"})
-    elif owner_id:
-        owner_key = canonical_hash({"crm_user_id": owner_id})
-        owner_name = (owner_directory or {}).get(
-            owner_key, owner_name or "Unknown owner"
-        )
-    else:
-        owner_key = canonical_hash({"owner_name": owner_name.casefold()})
+    identity = resolve_owner_identity(raw_value, owner_directory)
     return {
-        "ownerKey": owner_key,
-        "ownerName": owner_name,
+        "ownerKey": identity["ownerKey"],
+        "ownerId": identity.get("ownerId") or "",
+        "ownerName": identity["ownerName"],
     }
 
 
@@ -306,6 +287,36 @@ def _header_mapping(headers, field_names):
     if any(header is None for header in mapping.values()):
         raise ValueError("Export is missing planned fields")
     return mapping
+
+
+@contextmanager
+def _open_export_csv(temp_path):
+    """Read a Zoho Bulk Read ZIP or a Salesforce Bulk Query CSV."""
+    if zipfile.is_zipfile(temp_path):
+        with zipfile.ZipFile(temp_path, "r") as archive:
+            csv_members = [
+                entry
+                for entry in archive.infolist()
+                if not entry.is_dir() and entry.filename.lower().endswith(".csv")
+            ]
+            if len(csv_members) != 1:
+                raise ValueError("Stored export must contain exactly one CSV file")
+            with archive.open(csv_members[0], "r") as raw_csv:
+                with io.TextIOWrapper(
+                    raw_csv, encoding="utf-8-sig", newline=""
+                ) as text_csv:
+                    yield csv.DictReader(text_csv)
+        return
+    with open(temp_path, "r", encoding="utf-8-sig", newline="") as text_csv:
+        yield csv.DictReader(text_csv)
+
+
+def _evaluated_field(fields, *names):
+    for name in names:
+        evaluated = fields.get(name)
+        if evaluated:
+            return evaluated
+    return {}
 
 
 def _download_source_zip(bulk_row):
@@ -396,70 +407,58 @@ def _clean_records_from_bulk(bulk_row, module_row, scan_row, owner_directory, ow
     temp_path = _download_source_zip(bulk_row)
     records = []
     try:
-        with zipfile.ZipFile(temp_path, "r") as archive:
-            csv_members = [
-                entry
-                for entry in archive.infolist()
-                if not entry.is_dir() and entry.filename.lower().endswith(".csv")
-            ]
-            if len(csv_members) != 1:
-                raise ValueError("Stored export must contain exactly one CSV file")
-            with archive.open(csv_members[0], "r") as raw_csv:
-                with io.TextIOWrapper(
-                    raw_csv, encoding="utf-8-sig", newline=""
-                ) as text_csv:
-                    reader = csv.DictReader(text_csv)
-                    mapping = _header_mapping(reader.fieldnames or [], field_names)
-                    owner_header = mapping.get("Owner")
-                    for row in reader:
-                        fields, issues = _evaluate_record(row, field_plan, mapping)
-                        missing = sum(
-                            1
-                            for issue in issues
-                            if issue["metricGroup"] == "COMPLETENESS"
-                        )
-                        invalid = sum(
-                            1
-                            for issue in issues
-                            if issue["metricGroup"] == "VALIDITY"
-                        )
-                        if missing or invalid:
-                            continue
-                        record_id = fields["id"]["value"]
-                        if not record_id:
-                            continue
-                        owner_identity = {"ownerKey": "", "ownerName": "Unassigned"}
-                        if owner_header is not None:
-                            owner_identity = _owner_identity(
-                                fields.get("Owner", {}).get("value"),
-                                owner_directory,
-                            )
-                        owner_key = owner_identity["ownerKey"] if owner_identity["ownerName"] != "Unassigned" else ""
-                        if not _matches_owners(owner_key, owners):
-                            continue
-                        created = fields.get("Created_Time") or {}
-                        created_at = created.get("datetimeUtc") or created.get("value") or ""
-                        display_name = _record_display_name(fields)
-                        records.append(
-                            {
-                                "findingId": _stable_finding_id(
-                                    scan_row.get("scan_id"),
-                                    module_api_name,
-                                    record_id,
-                                ),
-                                "recordName": display_name or None,
-                                "recordRef": display_name or UNNAMED_RECORD,
-                                "module": module_api_name,
-                                "state": "proper",
-                                "severity": None,
-                                "reason": "No quality issues",
-                                "ownerName": owner_identity["ownerName"],
-                                "issueCount": 0,
-                                "issues": [],
-                                "createdTime": _utc_timestamp(created_at),
-                                "computedAt": _utc_timestamp(created_at),
-                            }
-                        )
+        with _open_export_csv(temp_path) as reader:
+            mapping = _header_mapping(reader.fieldnames or [], field_names)
+            planned_owner_field = owner_field_name(mapping)
+            for row in reader:
+                fields, issues = _evaluate_record(row, field_plan, mapping)
+                missing = sum(
+                    1
+                    for issue in issues
+                    if issue["metricGroup"] == "COMPLETENESS"
+                )
+                invalid = sum(
+                    1
+                    for issue in issues
+                    if issue["metricGroup"] == "VALIDITY"
+                )
+                if missing or invalid:
+                    continue
+                record_id = _evaluated_field(fields, "id", "Id").get("value") or ""
+                if not record_id:
+                    continue
+                owner_identity = {"ownerKey": "", "ownerName": "Unassigned"}
+                if planned_owner_field is not None:
+                    owner_identity = _owner_identity(
+                        _evaluated_field(fields, planned_owner_field).get("value"),
+                        owner_directory,
+                    )
+                owner_key = owner_identity["ownerKey"] if owner_identity["ownerName"] != "Unassigned" else ""
+                if not _matches_owners(owner_key, owners):
+                    continue
+                created = _evaluated_field(fields, "Created_Time", "CreatedDate")
+                created_at = created.get("datetimeUtc") or created.get("value") or ""
+                display_name = _record_display_name(fields)
+                records.append(
+                    {
+                        "findingId": _stable_finding_id(
+                            scan_row.get("scan_id"),
+                            module_api_name,
+                            record_id,
+                        ),
+                        "recordName": display_name or None,
+                        "recordRef": display_name or UNNAMED_RECORD,
+                        "module": module_api_name,
+                        "state": "proper",
+                        "severity": None,
+                        "reason": "No quality issues",
+                        "ownerName": owner_identity["ownerName"],
+                        "issueCount": 0,
+                        "issues": [],
+                        "createdTime": _utc_timestamp(created_at),
+                        "computedAt": _utc_timestamp(created_at),
+                    }
+                )
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -486,3 +485,158 @@ def list_clean_records(zcql, scan_row, modules, owners, owner_directory):
                     )
                 )
     return records
+
+
+def _rate(numerator, denominator):
+    return round(numerator / denominator, 6) if denominator else None
+
+
+def _accumulate_owner(owners, field_plan, fields, identity):
+    owner = owners.setdefault(
+        identity["ownerKey"],
+        {
+            **identity,
+            "recordCount": 0,
+            "totalCells": 0,
+            "populatedCells": 0,
+            "checkedValues": 0,
+            "invalidValues": 0,
+        },
+    )
+    owner["recordCount"] += 1
+    owner["totalCells"] += len(field_plan)
+    for spec in field_plan:
+        evaluated = fields.get(spec["name"]) or {}
+        if not evaluated.get("value"):
+            continue
+        owner["populatedCells"] += 1
+        if evaluated.get("kind"):
+            owner["checkedValues"] += 1
+            if not evaluated.get("valid"):
+                owner["invalidValues"] += 1
+
+
+def _owner_analytics_candidate(owner):
+    payload = {
+        "ownerKey": owner["ownerKey"],
+        "ownerName": owner.get("ownerName") or "Unassigned",
+        "recordCount": int(owner.get("recordCount") or 0),
+        "totalCells": int(owner.get("totalCells") or 0),
+        "populatedCells": int(owner.get("populatedCells") or 0),
+        "checkedValues": int(owner.get("checkedValues") or 0),
+        "invalidValues": int(owner.get("invalidValues") or 0),
+    }
+    payload["emptyCells"] = payload["totalCells"] - payload["populatedCells"]
+    payload["completenessRate"] = _rate(payload["populatedCells"], payload["totalCells"])
+    payload["validityRate"] = _rate(
+        payload["checkedValues"] - payload["invalidValues"],
+        payload["checkedValues"],
+    )
+    aggregate_json = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
+    return {
+        "schemaVersion": "owner-quality-v2",
+        "ruleVersion": "quality-rules-v1",
+        "resultChecksum": hashlib.sha256(aggregate_json.encode("utf-8")).hexdigest(),
+        "computedAt": "",
+        "data": payload,
+    }
+
+
+def _owner_analytics_from_bulk(bulk_row, module_row, scan_row, owner_directory):
+    field_names = json.loads(module_row.get("field_allowlist_json") or "[]")
+    if not isinstance(field_names, list) or not field_names:
+        raise ValueError("Stored field allowlist is invalid")
+    planned_owner_field = owner_field_name(field_names)
+    if planned_owner_field is None:
+        return []
+    module_api_name = str(module_row.get("module_api_name") or "")
+    field_plan = _build_field_plan(
+        field_names,
+        _parse_field_metadata(module_row, field_names),
+        module_api_name,
+        scan_row.get("depth_policy"),
+    )
+    temp_path = _download_source_zip(bulk_row)
+    owners = {}
+    try:
+        with _open_export_csv(temp_path) as reader:
+            mapping = _header_mapping(reader.fieldnames or [], field_names)
+            for row in reader:
+                fields, _issues = _evaluate_record(row, field_plan, mapping)
+                identity = _owner_identity(
+                    _evaluated_field(fields, planned_owner_field).get("value"),
+                    owner_directory,
+                )
+                _accumulate_owner(owners, field_plan, fields, identity)
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+    return [
+        _owner_analytics_candidate(owner)
+        for owner in sorted(
+            owners.values(),
+            key=lambda item: (
+                str(item.get("ownerName") or "").lower(),
+                item.get("ownerKey") or "",
+            ),
+        )
+    ]
+
+
+def list_owner_analytics(zcql, scan_row, module_api_name, owner_directory):
+    """Rebuild owner_quality-shaped analytics from the stored Salesforce CSV."""
+    selected = str(module_api_name or "")
+    collected = []
+    for module_row in find_module_runs(zcql, scan_row["ROWID"]):
+        if str(module_row.get("module_api_name") or "") != selected:
+            continue
+        for bulk_row in find_bulk_jobs(zcql, module_row["ROWID"]):
+            if str(bulk_row.get("source_file_id") or "").isdigit():
+                collected.extend(
+                    _owner_analytics_from_bulk(
+                        bulk_row, module_row, scan_row, owner_directory
+                    )
+                )
+    return collected
+
+
+def attach_salesforce_owner_analytics(datastore, zcql, scan_row, payload):
+    """Fill empty ownerAnalytics from the Salesforce directory + stored CSV."""
+    from connections.repository import scan_crm_provider
+    from salesforce.owner_resolution import (
+        ensure_salesforce_owner_directory,
+        load_salesforce_connection_row,
+        load_salesforce_owner_directory,
+    )
+
+    if scan_crm_provider(scan_row) != "salesforce":
+        return payload
+    modules = payload.get("modules") or []
+    if not modules or all(module.get("ownerAnalytics") for module in modules):
+        return payload
+    connection = load_salesforce_connection_row(zcql, scan_row)
+    directory = {}
+    if connection is not None:
+        directory = ensure_salesforce_owner_directory(
+            datastore, zcql, connection, refresh=False
+        ) or load_salesforce_owner_directory(zcql, connection.get("ROWID"))
+    for module in modules:
+        if module.get("ownerAnalytics"):
+            continue
+        try:
+            module["ownerAnalytics"] = list_owner_analytics(
+                zcql,
+                scan_row,
+                module.get("moduleApiName"),
+                directory,
+            )
+        except Exception as exc:  # noqa: BLE001 - keep module metrics if owners fail
+            LOGGER.warning(
+                "Could not rebuild Salesforce owner analytics for %s: %s",
+                module.get("moduleApiName"),
+                exc,
+            )
+            module["ownerAnalytics"] = []
+    return payload

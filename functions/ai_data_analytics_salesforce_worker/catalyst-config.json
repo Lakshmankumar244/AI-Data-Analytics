@@ -1,0 +1,18 @@
+{
+	"deployment": {
+		"name": "ai_data_analytics_salesforce_worker",
+		"stack": "python_3_13",
+		"type": "job",
+		"env_variables": {
+					"SALESFORCE_CLIENT_ID": "3MVG9GBhY6wQjl2uuJzBRrbOPHSIcV5fKacKyv_l8z8cwkBw0wGTqiazx95QyGm_1duwaWq9S0iH1.zhShD_R",
+					"SALESFORCE_CLIENT_SECRET":"C9D7A60DAF89BB066CDDCBC7AC139EF8604A7A889A8046041F84BB364E440C76",
+					"SALESFORCE_LOGIN_URL":"https://login.salesforce.com",
+					"BULK_EXPORT_FOLDER_ID":"48465000000078186",
+					"ANALYTICS_WORKER_JOB_POOL_NAME":"sfDataAnalyticsWorkerPool",
+					"ANALYTICS_WORKER_FUNCTION_NAME":"ai_data_analytics_salesforce_worker"
+		}
+	},
+	"execution": {
+		"main": "main.py"
+	}
+}

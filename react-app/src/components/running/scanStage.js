@@ -14,6 +14,11 @@ const STAGE = {
     label: "Waiting for CRM",
     description: "The CRM is preparing the export.",
   },
+  readyToDownload: {
+    id: "readyToDownload",
+    label: "Ready to download",
+    description: "The CRM export is complete. Download has not started.",
+  },
   downloading: {
     id: "downloading",
     label: "Downloading data",
@@ -40,6 +45,7 @@ export const STAGE_FLOW = [
   STAGE.preparing,
   STAGE.submitting,
   STAGE.waiting,
+  STAGE.readyToDownload,
   STAGE.downloading,
   STAGE.processing,
   STAGE.completed,
@@ -49,14 +55,15 @@ const STAGE_BAR_PERCENT = {
   preparing: 0,
   submitting: 5,
   waiting: 20,
+  readyToDownload: 40,
   downloading: 60,
   processing: 80,
   completed: 100,
   failed: 0,
 };
 
+const READY_TO_DOWNLOAD_STATES = new Set(["READY_TO_DOWNLOAD"]);
 const DOWNLOAD_STATES = new Set([
-  "READY_TO_DOWNLOAD",
   "DOWNLOADING",
   "DOWNLOAD_RETRYABLE",
   "DOWNLOAD_UNKNOWN",
@@ -69,6 +76,7 @@ const LOCAL_PROCESS_STATES = new Set([
   "PROCESSED",
 ]);
 const EXPORT_COUNT_STATES = new Set([
+  ...READY_TO_DOWNLOAD_STATES,
   ...DOWNLOAD_STATES,
   ...LOCAL_PROCESS_STATES,
 ]);
@@ -117,6 +125,10 @@ export function moduleRecordsProcessed(module) {
   return asCount(module?.recordsProcessed);
 }
 
+export function moduleRecordsDownloaded(module) {
+  return asCount(module?.recordsDownloaded);
+}
+
 export function moduleExportRecordCount(module) {
   return providerRecordCount(module);
 }
@@ -141,6 +153,13 @@ export function deriveModuleStage(module) {
     moduleStatus === "PAUSED_RETRYABLE"
   ) {
     return STAGE.failed;
+  }
+
+  if (
+    READY_TO_DOWNLOAD_STATES.has(bulkStatus) ||
+    READY_TO_DOWNLOAD_STATES.has(moduleStatus)
+  ) {
+    return STAGE.readyToDownload;
   }
 
   if (DOWNLOAD_STATES.has(bulkStatus) || DOWNLOAD_STATES.has(moduleStatus)) {
@@ -175,15 +194,20 @@ export function deriveModuleStage(module) {
 export function moduleDisplayProgress(module, { isActive = false, isDone = false } = {}) {
   const known = hasKnownRecordTotal(module);
   const total = moduleRecordTotal(module);
-  const actual = moduleRecordsProcessed(module);
+  const processed = moduleRecordsProcessed(module);
+  const downloaded = moduleRecordsDownloaded(module);
+  const stage = deriveModuleStage(module);
+  const isDownloadStage =
+    stage.id === STAGE.readyToDownload.id || stage.id === STAGE.downloading.id;
+  const actual = isDownloadStage ? downloaded : processed;
 
   if (isDone || module?.status === "COMPLETED") {
-    const completedTotal = known ? total : actual;
+    const completedTotal = known ? total : processed || downloaded;
     return {
       percent: 100,
       scanned: completedTotal,
       estimatedTotal: known ? completedTotal : null,
-      hasKnownTotal: known || actual > 0,
+      hasKnownTotal: known || completedTotal > 0,
     };
   }
 
@@ -196,12 +220,11 @@ export function moduleDisplayProgress(module, { isActive = false, isDone = false
     };
   }
 
-  const stage = deriveModuleStage(module);
   if (actual > 0) {
     const percent =
       known && total
         ? Math.min(99, Math.round((actual / total) * 100))
-        : STAGE_BAR_PERCENT.processing;
+        : STAGE_BAR_PERCENT[stage.id] ?? STAGE_BAR_PERCENT.processing;
     return {
       percent,
       scanned: actual,
@@ -210,10 +233,9 @@ export function moduleDisplayProgress(module, { isActive = false, isDone = false
     };
   }
 
-  const percent = STAGE_BAR_PERCENT[stage.id] ?? STAGE_BAR_PERCENT.preparing;
   return {
-    percent,
-    scanned: known && total ? Math.round((total * percent) / 100) : 0,
+    percent: STAGE_BAR_PERCENT[stage.id] ?? STAGE_BAR_PERCENT.preparing,
+    scanned: 0,
     estimatedTotal: known ? total : null,
     hasKnownTotal: known,
   };

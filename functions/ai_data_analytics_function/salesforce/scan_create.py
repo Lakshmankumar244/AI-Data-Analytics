@@ -1,4 +1,4 @@
-"""Salesforce scan control-plane: create scan_jobs without Zoho extraction.
+"""Salesforce scan control-plane: persist a scan plan and enqueue the SF worker.
 
 Schema (Catalyst Data Store; create the column in the console — this repo has
 no table-migration mechanism):
@@ -8,19 +8,17 @@ no table-migration mechanism):
 Existing Zoho inserts omit the column. Salesforce inserts set crm_provider so
 connection_row_id is never resolved against zoho_connections by ROWID collision.
 
-Do not enqueue ORCHESTRATE_SCAN for Salesforce scans. The worker still assumes
-Zoho Bulk Read and its connections/repository still binds connection_row_id to
-zoho_connections. When Salesforce extraction is implemented:
-
-    1. Guard the worker discover/orchestrate path on crm_provider.
-    2. Copy scan_crm_provider into the worker connections repository.
-    3. Enqueue a Salesforce extraction job instead of Zoho ORCHESTRATE_SCAN.
+After scan_jobs and scan_module_runs persist, enqueue one
+ORCHESTRATE_SALESFORCE_SCAN pipeline_tasks row to the Salesforce Job Function.
+Do not enqueue Zoho ORCHESTRATE_SCAN. Extraction is still worker-owned later.
 """
 
 import json
 import logging
 import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import zcatalyst_sdk
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +97,93 @@ def build_salesforce_module_field_plan(describe_payload: dict, clock_field: str)
     return allowlist, described["fields"]
 
 
+def _enqueue_salesforce_worker(datastore, scan_row):
+    from pipeline.salesforce_orchestrate_enqueue import (
+        enqueue_salesforce_orchestrate_scan,
+    )
+
+    return enqueue_salesforce_orchestrate_scan(
+        zcatalyst_sdk.initialize(), datastore, scan_row
+    )
+
+
+def _sync_salesforce_owner_directory(
+    datastore, zcql, connection_row, access_token, instance_url
+):
+    """Populate salesforce_connection_owners from the Salesforce connection.
+
+    Same moment as Zoho discover caching connection users: after the stored
+    CRM token is available, before the scan is enqueued. Failure is logged
+    and must not block scan creation.
+    """
+    from salesforce.user_directory import (
+        _connection_row_id,
+        sync_salesforce_owner_directory,
+    )
+
+    connection_row_id = _connection_row_id(connection_row)
+    logger.info(
+        "SF_OWNER_DIR called=true connection_row_id=%s",
+        connection_row_id or "<empty>",
+    )
+    try:
+        result = sync_salesforce_owner_directory(
+            datastore, zcql, connection_row, access_token, instance_url
+        ) or {}
+    except Exception as exc:
+        logger.exception(
+            "SF_OWNER_DIR called=true connection_row_id=%s sync_exception error=%s",
+            connection_row_id or "<empty>",
+            type(exc).__name__,
+        )
+        return {
+            "refreshed": False,
+            "apiCalls": 0,
+            "counts": {"user": 0, "queue": 0, "group": 0},
+            "warning": "Salesforce owner directory sync failed",
+        }
+    logger.info(
+        "SF_OWNER_DIR scan_create_sync_result connection_row_id=%s refreshed=%s "
+        "warning=%s counts=%s",
+        connection_row_id or "<empty>",
+        result.get("refreshed"),
+        result.get("warning"),
+        result.get("counts"),
+    )
+    if result.get("warning"):
+        logger.warning(
+            "Salesforce owner directory sync warning connection_row_id=%s: %s",
+            connection_row_id or "<empty>",
+            result["warning"],
+        )
+    return result
+
+
+def _enqueue_http_result(scan_id, enqueue_result):
+    task = enqueue_result.get("task") or {}
+    return {
+        "scanId": scan_id,
+        "crmProvider": SALESFORCE_CRM_PROVIDER,
+        "taskId": task.get("task_id"),
+        "taskStatus": task.get("status"),
+        "workerSubmitted": bool(enqueue_result.get("submitted")),
+        "alreadyActive": bool(enqueue_result.get("alreadyActive")),
+    }
+
+
+def _enqueue_failure_response(scan_id, enqueue_result):
+    code = enqueue_result.get("code") or "SALESFORCE_WORKER_ENQUEUE_FAILED"
+    payload = {
+        "error": {
+            "code": code,
+            "message": "The Salesforce worker could not be queued",
+        },
+        **_enqueue_http_result(scan_id, enqueue_result),
+    }
+    status = 409 if code == "WORKER_ENQUEUE_OUTCOME_UNKNOWN" else 500
+    return status, payload
+
+
 def create_salesforce_scan(
     datastore,
     zcql,
@@ -107,7 +192,7 @@ def create_salesforce_scan(
     matching_scans=None,
     reused_scan_response=None,
 ):
-    """Persist a Salesforce scan plan and leave it CREATED without worker enqueue."""
+    """Persist a Salesforce scan plan, then enqueue ORCHESTRATE_SALESFORCE_SCAN."""
     from common.core import (
         API_VERSION,
         DISCOVERED_FIELD_PLAN_VERSION,
@@ -133,6 +218,9 @@ def create_salesforce_scan(
             access_token, instance_url, connection_row
         )
         persist_salesforce_organization_name(datastore, connection_row, organization)
+        _sync_salesforce_owner_directory(
+            datastore, zcql, connection_row, access_token, instance_url
+        )
         time_zone = require_salesforce_timezone(organization)
         objects = fetch_accessible_sobjects(access_token, instance_url)
         config = validate_scan_config(
@@ -175,9 +263,27 @@ def create_salesforce_scan(
                     "reuseReason": reason,
                 }
             )
-            return 200, response_builder(
+            try:
+                enqueue_result = _enqueue_salesforce_worker(datastore, active_scan)
+            except Exception:
+                logger.exception(
+                    "Could not enqueue Salesforce worker for reused scanId=%s "
+                    "crm_provider=salesforce",
+                    active_scan.get("scan_id"),
+                )
+                enqueue_result = {
+                    "ok": False,
+                    "code": "SALESFORCE_WORKER_ENQUEUE_FAILED",
+                }
+            if not enqueue_result.get("ok"):
+                return _enqueue_failure_response(
+                    active_scan.get("scan_id"), enqueue_result
+                )
+            body = response_builder(
                 active_scan, config["modules"], "ACTIVE_EQUIVALENT_SCAN"
             )
+            body.update(_enqueue_http_result(active_scan.get("scan_id"), enqueue_result))
+            return 200, body
 
     try:
         module_plans = []
@@ -309,8 +415,21 @@ def create_salesforce_scan(
             }
         }
 
-    # Do not enqueue ORCHESTRATE_SCAN: the worker still assumes Zoho Bulk Read.
-    return 201, {
+    try:
+        enqueue_result = _enqueue_salesforce_worker(datastore, inserted_scan)
+    except Exception:
+        logger.exception(
+            "Could not enqueue Salesforce worker for scanId=%s crm_provider=salesforce",
+            scan_id,
+        )
+        enqueue_result = {
+            "ok": False,
+            "code": "SALESFORCE_WORKER_ENQUEUE_FAILED",
+        }
+    if not enqueue_result.get("ok"):
+        return _enqueue_failure_response(scan_id, enqueue_result)
+
+    body = {
         "scanId": scan_id,
         "status": "CREATED",
         "crmProvider": SALESFORCE_CRM_PROVIDER,
@@ -328,3 +447,5 @@ def create_salesforce_scan(
             "organizationTimezone": time_zone,
         },
     }
+    body.update(_enqueue_http_result(scan_id, enqueue_result))
+    return 201, body

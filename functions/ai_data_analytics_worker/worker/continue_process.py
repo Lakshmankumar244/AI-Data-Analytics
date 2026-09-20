@@ -1,12 +1,11 @@
 """Continue from PREPARE_BATCHES into PROCESS_BATCHES in the same worker job."""
 
-import hashlib
-import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from pipeline.processing import process_and_finalize
+from shared.datastore import canonical_hash as _canonical_hash, numeric_row_id as _numeric_row_id
 from worker.task_state import catalyst_datetime, query_one
 
 
@@ -15,26 +14,6 @@ logger = logging.getLogger(__name__)
 PROCESS_TASK_TYPE = "PROCESS_BATCHES"
 AGGREGATE_SCHEMA_VERSION = "quality-aggregate-v1"
 QUALITY_RULE_VERSION = "quality-rules-v1"
-
-
-def _canonical_hash(value):
-    encoded = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _foreign_row_id(value):
-    if isinstance(value, dict):
-        return value.get("ROWID") or value.get("rowid")
-    return value
-
-
-def _numeric_row_id(value, label):
-    row_id = str(_foreign_row_id(value))
-    if not row_id.isdigit():
-        raise ValueError(f"{label} is invalid")
-    return row_id
 
 
 def continue_to_process_batches(app, prepare_task_row):

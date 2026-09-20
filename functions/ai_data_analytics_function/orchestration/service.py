@@ -20,6 +20,9 @@ from common.profiler import profile_stage
 from orchestration.choose import choose_action, orchestrate_owns_scan
 from orchestration.repository import load_scan_state
 from pipeline.orchestrate_enqueue import enqueue_orchestrate_scan
+from pipeline.salesforce_orchestrate_enqueue import (
+    enqueue_salesforce_orchestrate_scan,
+)
 from pipeline.task_routes import enqueue_prepare_batches, enqueue_process_batches
 from connections.repository import scan_crm_provider
 from scans.discover import discover_scan
@@ -139,12 +142,106 @@ def advance_scan(request, datastore, scan_id):
             )
 
         if scan_crm_provider(state["scan"]) == "salesforce":
+            enqueue_result = enqueue_salesforce_orchestrate_scan(
+                app, datastore, state["scan"]
+            )
+            task = enqueue_result.get("task") or {}
+            diagnostics = enqueue_result.get("diagnostics") or {}
+            LOGGER.info(
+                "SCAN_PROFILE %s",
+                json.dumps(
+                    {
+                        "scope": "ORCHESTRATE_SALESFORCE_SCAN",
+                        "stage": "advance_enqueue",
+                        "scanId": scan_id,
+                        "crm_provider": "salesforce",
+                        "scanStatus": state["scan"].get("status"),
+                        "scanStatusUnchanged": True,
+                        "createdToPlanned": False,
+                        "ok": enqueue_result.get("ok"),
+                        "submitted": enqueue_result.get("submitted"),
+                        "submitJobCalled": enqueue_result.get("submitJobCalled"),
+                        "alreadyActive": enqueue_result.get("alreadyActive"),
+                        "code": enqueue_result.get("code"),
+                        "reason": enqueue_result.get("reason"),
+                        "taskId": task.get("task_id"),
+                        "taskStatus": task.get("status"),
+                        "started_at": diagnostics.get("started_at"),
+                        "lease_expires_at": diagnostics.get("lease_expires_at"),
+                        "enqueued_at": diagnostics.get("enqueued_at"),
+                        "runningIsStale": diagnostics.get("runningIsStale"),
+                        "queuedIsStale": diagnostics.get("queuedIsStale"),
+                        "staleRecovery": enqueue_result.get("staleRecovery"),
+                        "pool": enqueue_result.get("jobPoolName"),
+                        "function": enqueue_result.get("functionName"),
+                        "workerJobId": enqueue_result.get("workerJobId"),
+                    },
+                    default=str,
+                ),
+            )
+            if enqueue_result.get("ok"):
+                return json_response(
+                    {
+                        "scanId": scan_id,
+                        "crmProvider": "salesforce",
+                        "currentStatus": state["scan"].get("status"),
+                        "operationPerformed": "NONE",
+                        "nextAction": "ORCHESTRATE_SALESFORCE_SCAN",
+                        "waitingForProvider": False,
+                        "blocked": False,
+                        "workerOwned": True,
+                        "orchestrationOwner": "SALESFORCE_WORKER",
+                        "taskId": task.get("task_id"),
+                        "taskStatus": task.get("status"),
+                        "alreadyActive": bool(enqueue_result.get("alreadyActive")),
+                        "submitted": bool(enqueue_result.get("submitted")),
+                        "submitJobCalled": bool(enqueue_result.get("submitJobCalled")),
+                        "enqueueReason": enqueue_result.get("reason"),
+                        "staleRecovery": bool(enqueue_result.get("staleRecovery")),
+                        "startedAt": diagnostics.get("started_at"),
+                        "leaseExpiresAt": diagnostics.get("lease_expires_at"),
+                        "enqueuedAt": diagnostics.get("enqueued_at"),
+                        "runningIsStale": diagnostics.get("runningIsStale"),
+                        "queuedIsStale": diagnostics.get("queuedIsStale"),
+                        "workerJobId": enqueue_result.get("workerJobId"),
+                    }
+                )
+            if enqueue_result.get("code") == "WORKER_ENQUEUE_OUTCOME_UNKNOWN":
+                return json_response(
+                    {
+                        "error": {
+                            "code": "WORKER_ENQUEUE_OUTCOME_UNKNOWN",
+                            "message": "Inspect the Job Pool before retrying this task",
+                        },
+                        "scanId": scan_id,
+                        "crmProvider": "salesforce",
+                        "taskId": task.get("task_id"),
+                        "taskStatus": task.get("status"),
+                        "submitJobCalled": False,
+                        "startedAt": diagnostics.get("started_at"),
+                        "leaseExpiresAt": diagnostics.get("lease_expires_at"),
+                        "enqueuedAt": diagnostics.get("enqueued_at"),
+                        "nextAction": "REVIEW_WORKER_JOB",
+                        "workerOwned": False,
+                    },
+                    409,
+                )
             return json_response(
                 {
                     "error": {
-                        "code": "SALESFORCE_EXTRACTION_NOT_IMPLEMENTED",
-                        "message": "Salesforce scan extraction is not implemented yet",
-                    }
+                        "code": enqueue_result.get("code")
+                        or "SALESFORCE_WORKER_ENQUEUE_FAILED",
+                        "message": "The Salesforce worker could not be queued",
+                    },
+                    "scanId": scan_id,
+                    "crmProvider": "salesforce",
+                    "taskId": task.get("task_id"),
+                    "taskStatus": task.get("status"),
+                    "submitJobCalled": bool(enqueue_result.get("submitJobCalled")),
+                    "startedAt": diagnostics.get("started_at"),
+                    "leaseExpiresAt": diagnostics.get("lease_expires_at"),
+                    "enqueuedAt": diagnostics.get("enqueued_at"),
+                    "workerOwned": False,
                 },
                 409,
             )

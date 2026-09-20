@@ -19,7 +19,7 @@ function runtimeLabel(estimate) {
   return `${minLabel}–${maxLabel}`;
 }
 
-export default function CostEstimate({ estimate, loading }) {
+export default function CostEstimate({ estimate, loading, showApiCredits = true }) {
   if (loading || !estimate) {
     return (
       <div className="col-span-2 min-w-0 sm:col-span-2">
@@ -44,9 +44,11 @@ export default function CostEstimate({ estimate, loading }) {
       </DockStat>
       <DockStat label="Runtime">
         <span className="mono">{runtimeLabel(estimate)}</span>
-        <span className="ml-1.5 font-normal text-ink-muted">
-          {formatNumber(credits)} API credits
-        </span>
+        {showApiCredits ? (
+          <span className="ml-1.5 font-normal text-ink-muted">
+            {formatNumber(credits)} API credits
+          </span>
+        ) : null}
       </DockStat>
     </>
   );

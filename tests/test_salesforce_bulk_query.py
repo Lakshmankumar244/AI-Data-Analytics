@@ -298,6 +298,8 @@ class SalesforceBulkSubmitTests(unittest.TestCase):
         updated = datastore.tables["bulk_read_jobs"].updates[0]
         self.assertEqual(updated["ROWID"], "17")
         self.assertEqual(updated["provider_job_id"], JOB_ID)
+        self.assertEqual(updated["status"], "SUBMITTED")
+        self.assertNotIn("provider_status", updated)
         self.assertNotIn("zoho_job_id", updated)
 
     def test_submit_uses_stored_token_refresh(self):

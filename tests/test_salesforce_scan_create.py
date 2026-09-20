@@ -252,6 +252,37 @@ class SalesforceObjectAndFieldPlanTests(unittest.TestCase):
 
 
 class SalesforceScanCreateTests(unittest.TestCase):
+    def setUp(self):
+        self.enqueue_patcher = patch(
+            "salesforce.scan_create._enqueue_salesforce_worker",
+            return_value={
+                "ok": True,
+                "submitted": True,
+                "alreadyActive": False,
+                "task": {
+                    "task_id": "task_sf_test",
+                    "status": "QUEUED",
+                    "task_type": "ORCHESTRATE_SALESFORCE_SCAN",
+                    "scan_row_id": "1",
+                },
+                "jobPoolName": "sfDataAnalyticsWorkerPool",
+                "functionName": "ai_data_analytics_salesforce_worker",
+            },
+        )
+        self.enqueue = self.enqueue_patcher.start()
+        self.addCleanup(self.enqueue_patcher.stop)
+        self.directory_patcher = patch(
+            "salesforce.user_directory.sync_salesforce_owner_directory",
+            return_value={
+                "refreshed": True,
+                "apiCalls": 1,
+                "counts": {"user": 1, "queue": 0, "group": 0},
+                "warning": None,
+            },
+        )
+        self.directory_sync = self.directory_patcher.start()
+        self.addCleanup(self.directory_patcher.stop)
+
     def test_create_scan_persists_salesforce_native_plan(self):
         datastore = FakeDatastore()
         zcql = FakeZcql()
@@ -308,6 +339,13 @@ class SalesforceScanCreateTests(unittest.TestCase):
         self.assertEqual(scan_row["organization_timezone"], "America/Los_Angeles")
         self.assertEqual(scan_row["status"], "CREATED")
         self.assertNotIn("enqueue_orchestrate_scan", json.dumps(scan_row, default=str))
+        self.enqueue.assert_called_once()
+        enqueued_scan = self.enqueue.call_args[0][1]
+        self.assertEqual(enqueued_scan["crm_provider"], "salesforce")
+        self.assertEqual(enqueued_scan["ROWID"], scan_row["ROWID"])
+        self.assertEqual(body["taskId"], "task_sf_test")
+        self.assertEqual(body["taskStatus"], "QUEUED")
+        self.assertTrue(body["workerSubmitted"])
         modules = datastore.tables["scan_module_runs"].inserts
         names = [row["module_api_name"] for row in modules]
         self.assertEqual(names, ["Account", "Contact", "Opportunity"])
@@ -321,6 +359,85 @@ class SalesforceScanCreateTests(unittest.TestCase):
         self.assertEqual(metadata[0]["apiName"], "Id")
         self.assertNotIn("zoho_connections", zcql.queries)
         self.assertNotIn("zoho", json.dumps(scan_row, default=str).lower())
+        self.directory_sync.assert_called_once()
+        sync_args = self.directory_sync.call_args[0]
+        self.assertIs(sync_args[0], datastore)
+        self.assertIs(sync_args[1], zcql)
+        self.assertEqual(sync_args[2], CONNECTION)
+        self.assertEqual(sync_args[3], "stored-access-token")
+        self.assertEqual(sync_args[4], "https://example.my.salesforce.com")
+        self.assertNotIn("zoho_connection_users", datastore.table_names)
+
+    def test_create_scan_syncs_owner_directory_like_zoho_discover(self):
+        datastore = FakeDatastore()
+        zcql = FakeZcql()
+        with patch(
+            "salesforce.client.get_salesforce_access_token",
+            return_value=("stored-access-token", "https://example.my.salesforce.com"),
+        ), patch(
+            "salesforce.client.fetch_salesforce_organization",
+            return_value={
+                "id": "00D5g00000OrgIdAAA",
+                "name": "Acme",
+                "timeZone": "America/Los_Angeles",
+            },
+        ), patch(
+            "salesforce.client.persist_salesforce_organization_name"
+        ), patch(
+            "salesforce.client.fetch_accessible_sobjects",
+            return_value=[{"apiName": "Account", "label": "Account"}],
+        ), patch(
+            "salesforce.describe.fetch_sobject_describe",
+            return_value=ACCOUNT_DESCRIBE,
+        ), self.assertLogs("salesforce.scan_create", level="INFO") as logs:
+            status, body = create_salesforce_scan(
+                datastore, zcql, CONNECTION, PAYLOAD
+            )
+        self.assertEqual(status, 201)
+        self.assertEqual(body["status"], "CREATED")
+        self.assertTrue(
+            any("SF_OWNER_DIR called=true connection_row_id=555" in message for message in logs.output)
+        )
+        self.directory_sync.assert_called_once_with(
+            datastore,
+            zcql,
+            CONNECTION,
+            "stored-access-token",
+            "https://example.my.salesforce.com",
+        )
+        source = (
+            Path(FUNCTION_ROOT) / "salesforce" / "scan_create.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("sync_salesforce_owner_directory", source)
+        self.assertNotIn("sync_connection_user_directory", source)
+        self.assertNotIn("zoho_connection_users", source)
+
+    def test_owner_directory_sync_failure_does_not_block_scan_create(self):
+        self.directory_sync.side_effect = RuntimeError("directory insert failed")
+        with patch(
+            "salesforce.client.get_salesforce_access_token",
+            return_value=("stored-access-token", "https://example.my.salesforce.com"),
+        ), patch(
+            "salesforce.client.fetch_salesforce_organization",
+            return_value={
+                "id": "00D5g00000OrgIdAAA",
+                "timeZone": "America/Los_Angeles",
+            },
+        ), patch(
+            "salesforce.client.persist_salesforce_organization_name"
+        ), patch(
+            "salesforce.client.fetch_accessible_sobjects",
+            return_value=[{"apiName": "Account", "label": "Account"}],
+        ), patch(
+            "salesforce.describe.fetch_sobject_describe",
+            return_value=ACCOUNT_DESCRIBE,
+        ), self.assertLogs("salesforce.scan_create", level="ERROR"):
+            status, body = create_salesforce_scan(
+                FakeDatastore(), FakeZcql(), CONNECTION, PAYLOAD
+            )
+        self.assertEqual(status, 201)
+        self.assertEqual(body["status"], "CREATED")
+        self.enqueue.assert_called_once()
 
     def test_modified_clock_stores_last_modified_date(self):
         datastore = FakeDatastore()
@@ -382,6 +499,7 @@ class SalesforceScanCreateTests(unittest.TestCase):
             )
         self.assertEqual(status, 403)
         self.assertEqual(body["error"]["code"], "MODULE_NOT_ACCESSIBLE")
+        self.enqueue.assert_not_called()
 
     def test_missing_timezone_fails_closed_on_create(self):
         with patch(
@@ -401,14 +519,19 @@ class SalesforceScanCreateTests(unittest.TestCase):
             )
         self.assertEqual(status, 502)
         self.assertEqual(body["error"]["code"], "ORGANIZATION_TIMEZONE_MISSING")
+        self.enqueue.assert_not_called()
 
     def test_create_does_not_enqueue_zoho_worker(self):
         source = (
             Path(FUNCTION_ROOT) / "salesforce" / "scan_create.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn("enqueue_orchestrate_scan", source)
+        self.assertNotIn("ANALYTICS_WORKER_JOB_POOL_NAME", source)
+        self.assertNotIn("ai_data_analytics_worker", source)
         self.assertNotIn("zoho.client", source)
         self.assertNotIn("BASE_FIELD_ALLOWLIST", source)
+        self.assertIn("_enqueue_salesforce_worker", source)
+        self.assertIn("enqueue_salesforce_orchestrate_scan", source)
         self.assertIn('crm_provider": SALESFORCE_CRM_PROVIDER', source)
         routes = (Path(FUNCTION_ROOT) / "scans" / "routes.py").read_text(encoding="utf-8")
         self.assertIn("create_salesforce_scan", routes)
@@ -419,6 +542,41 @@ class SalesforceScanCreateTests(unittest.TestCase):
         after_sf = routes.split("if not connection_row:", 1)[1]
         self.assertIn("enqueue_orchestrate_scan", after_sf)
         self.assertIn("validate_scan_config(request.get_json(silent=True), connection_row)", after_sf)
+        self.assertNotIn("enqueue_salesforce_orchestrate_scan", after_sf)
+
+    def test_enqueue_failure_after_persist_is_not_silent_success(self):
+        self.enqueue.return_value = {
+            "ok": False,
+            "code": "SALESFORCE_WORKER_TASK_CREATE_FAILED",
+        }
+        datastore = FakeDatastore()
+        with patch(
+            "salesforce.client.get_salesforce_access_token",
+            return_value=("stored-access-token", "https://example.my.salesforce.com"),
+        ), patch(
+            "salesforce.client.fetch_salesforce_organization",
+            return_value={"id": "00D5g00000OrgIdAAA", "timeZone": "America/Los_Angeles"},
+        ), patch(
+            "salesforce.client.persist_salesforce_organization_name"
+        ), patch(
+            "salesforce.client.fetch_accessible_sobjects",
+            return_value=[{"apiName": "Account", "label": "Account"}],
+        ), patch(
+            "salesforce.describe.fetch_sobject_describe",
+            return_value=ACCOUNT_DESCRIBE,
+        ):
+            status, body = create_salesforce_scan(
+                datastore,
+                FakeZcql(),
+                CONNECTION,
+                PAYLOAD,
+            )
+        self.assertEqual(status, 500)
+        self.assertEqual(
+            body["error"]["code"], "SALESFORCE_WORKER_TASK_CREATE_FAILED"
+        )
+        self.assertEqual(datastore.tables["scan_jobs"].inserts[0]["status"], "CREATED")
+        self.assertEqual(body["scanId"], datastore.tables["scan_jobs"].inserts[0]["scan_id"])
 
 
 class SalesforceScanOwnershipTests(unittest.TestCase):
@@ -498,7 +656,7 @@ class SalesforceScanOwnershipTests(unittest.TestCase):
         self.assertTrue(any("zoho_connections" in query for query in queries))
         self.assertFalse(any("salesforce_connections" in query for query in queries))
 
-    def test_discover_and_advance_reject_salesforce_extraction(self):
+    def test_discover_rejects_salesforce_extraction_and_advance_only_enqueues(self):
         discover = (Path(FUNCTION_ROOT) / "scans" / "discover.py").read_text(
             encoding="utf-8"
         )
@@ -506,9 +664,17 @@ class SalesforceScanOwnershipTests(unittest.TestCase):
             Path(FUNCTION_ROOT) / "orchestration" / "service.py"
         ).read_text(encoding="utf-8")
         self.assertIn("SALESFORCE_EXTRACTION_NOT_IMPLEMENTED", discover)
-        self.assertIn("SALESFORCE_EXTRACTION_NOT_IMPLEMENTED", advance)
+        self.assertNotIn("SALESFORCE_EXTRACTION_NOT_IMPLEMENTED", advance)
+        self.assertIn("enqueue_salesforce_orchestrate_scan", advance)
         self.assertIn('scan_crm_provider(scan_row) == "salesforce"', discover)
         self.assertIn('scan_crm_provider(state["scan"]) == "salesforce"', advance)
+        self.assertIn('"orchestrationOwner": "SALESFORCE_WORKER"', advance)
+        zoho_enqueue = (
+            Path(FUNCTION_ROOT) / "pipeline" / "orchestrate_enqueue.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("ANALYTICS_WORKER_JOB_POOL_NAME", zoho_enqueue)
+        self.assertIn('ORCHESTRATE_TASK_TYPE = "ORCHESTRATE_SCAN"', zoho_enqueue)
+        self.assertNotIn("SALESFORCE_WORKER_JOB_POOL_NAME", zoho_enqueue)
 
 
 class SalesforceDescribeImportFix(unittest.TestCase):

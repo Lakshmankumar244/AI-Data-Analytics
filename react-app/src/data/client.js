@@ -26,6 +26,13 @@ export async function getSalesforceConnection() {
   return readJsonResponse(res, "getSalesforceConnection");
 }
 
+export async function getSalesforceMetadata() {
+  const res = await fetch(`${FUNCTION_BASE_URL}/api/salesforce/metadata`, {
+    credentials: "same-origin",
+  });
+  return readJsonResponse(res, "getSalesforceMetadata");
+}
+
 export async function activateConnection(connectionId) {
   const res = await fetch(
     `${FUNCTION_BASE_URL}/api/zoho/connections/${encodeURIComponent(connectionId)}/activate`,

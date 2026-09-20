@@ -2,10 +2,15 @@
   "functions": {
     "targets": [
       "ai_data_analytics_function",
-      "ai_data_analytics_worker"
+      "ai_data_analytics_worker",
+      "ai_data_analytics_salesforce_worker"
     ],
     "ignore": [],
-    "source": "functions"
+    "source": "functions",
+    "scripts": {
+      "preserve": "python _shared/sync_into_workers.py",
+      "predeploy": "python _shared/sync_into_workers.py"
+    }
   },
   "client": {
     "source": "react-app/build",

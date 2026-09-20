@@ -85,7 +85,13 @@ _EXCLUDED_STANDARD_OBJECTS = frozenset(
 
 
 def _discovery_error(code, message, cause=None):
-    from common.core import DiscoveryError
+    try:
+        from common.core import DiscoveryError
+    except ImportError:
+        class DiscoveryError(RuntimeError):
+            def __init__(self, error_code, error_message):
+                super().__init__(error_message)
+                self.code = error_code
 
     error = DiscoveryError(code, message)
     if cause is not None:

@@ -7,18 +7,30 @@ import LoadingState from "../shared/LoadingState";
 import { Button } from "@/components/ui/button";
 
 function ZohoMark({ size = 36 }) {
+  const height = size;
+  const width = Math.round(size * (340 / 130));
   return (
     <svg
-      width={size}
-      height={size}
-      viewBox="0 0 40 40"
+      width={width}
+      height={height}
+      viewBox="0 0 340 130"
       fill="none"
       aria-hidden="true"
     >
-      <rect x="2" y="2" width="16" height="16" rx="3" fill="#E42527" />
-      <rect x="22" y="2" width="16" height="16" rx="3" fill="#F9B21D" />
-      <rect x="2" y="22" width="16" height="16" rx="3" fill="#2DA74E" />
-      <rect x="22" y="22" width="16" height="16" rx="3" fill="#2693D0" />
+      <g strokeWidth="14" strokeLinejoin="round">
+        <rect x="10" y="28" width="86" height="86" rx="18" stroke="#E42527" />
+        <rect
+          x="72"
+          y="10"
+          width="86"
+          height="86"
+          rx="18"
+          stroke="#1B8F3A"
+          transform="rotate(18 115 53)"
+        />
+        <rect x="166" y="24" width="86" height="86" rx="18" stroke="#1A73C7" />
+        <rect x="244" y="28" width="86" height="86" rx="18" stroke="#F0A818" />
+      </g>
     </svg>
   );
 }
@@ -81,7 +93,7 @@ function CrmCard({
 }) {
   return (
     <div className="flex h-full min-w-0 flex-col items-center rounded-md border border-line bg-[color-mix(in_srgb,var(--brand-soft)_28%,var(--paper))] px-5 py-5 text-center">
-      <div className="grid h-11 place-items-center">{logo}</div>
+      <div className="grid h-12 w-full max-w-[11rem] place-items-center">{logo}</div>
       <h2 className="mt-3 font-heading text-base font-semibold tracking-tight text-ink">
         {name}
       </h2>
@@ -184,9 +196,9 @@ export default function ConnectScreen() {
           <CrmCard
             name="Zoho CRM"
             description="Connect your Zoho CRM account to start scanning your data."
-            logo={<ZohoMark size={36} />}
+            logo={<ZohoMark size={40} />}
             buttonLabel="Connect Zoho CRM"
-            buttonIcon={<ZohoMark size={14} />}
+            buttonIcon={<ZohoMark size={16} />}
             onConnect={() => setConnectingProvider("zoho")}
             notice={connectionNotice}
             status={zohoStatus}

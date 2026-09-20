@@ -5,6 +5,7 @@ const PHASE_LABEL = {
   preparing: "Preparing scan",
   submitting: "Submitting to CRM",
   waiting: "Waiting for CRM",
+  readyToDownload: "Ready to download",
   downloading: "Downloading data",
   processing: "Processing records",
   completed: "Completed",

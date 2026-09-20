@@ -5,8 +5,12 @@ import { buildInitialState } from "./initialState";
 const AppStateContext = createContext(null);
 const AppDispatchContext = createContext(null);
 
-export function AppProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, undefined, buildInitialState);
+export function AppProvider({ children, initialState = null }) {
+  const [state, dispatch] = useReducer(
+    reducer,
+    undefined,
+    () => initialState ?? buildInitialState()
+  );
 
   return (
     <AppStateContext.Provider value={state}>

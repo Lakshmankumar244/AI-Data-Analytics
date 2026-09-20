@@ -1,6 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState, useActions, useAppDispatch } from "../../state/AppContext";
 import * as api from "../../data/client";
+import {
+  defaultAccessibleModuleNames,
+  isSalesforceProvider,
+  isZohoProvider,
+  retainedAccessibleModules,
+  salesforceAccessibleModules,
+  salesforceOrganizationName,
+} from "../../data/scanSetup";
 import { formatReportPeriod } from "../../utils/format";
 import { ContentContainer } from "../layout";
 import { Button } from "@/components/ui/button";
@@ -58,34 +66,104 @@ function periodSummary(range) {
   return range?.id || "Period not set";
 }
 
-function orgInitials(label) {
+function orgInitials(label, fallback = "ZH") {
   const parts = String(label || "")
     .split(/\s+/)
     .filter(Boolean);
   if (parts.length >= 2) {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   }
-  return String(label || "ZH").slice(0, 2).toUpperCase();
+  return String(label || fallback).slice(0, 2).toUpperCase();
 }
 
 export default function SetupScreen() {
-  const { connection, scanConfig, scanHistory } = useAppState();
+  const {
+    connection,
+    salesforceConnection,
+    scanConfig,
+    scanHistory,
+    activeConnection,
+  } = useAppState();
   const { setScanConfig } = useActions();
   const dispatch = useAppDispatch();
   const [estimate, setEstimate] = useState(null);
   const [estimating, setEstimating] = useState(false);
   const [starting, setStarting] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [salesforceMetadata, setSalesforceMetadata] = useState(null);
+  const [metadataError, setMetadataError] = useState(null);
+  const [loadingMetadata, setLoadingMetadata] = useState(false);
 
-  // Default module selection to everything accessible, once the connection loads.
+  const isSalesforce = isSalesforceProvider(activeConnection);
+  const isZoho = isZohoProvider(activeConnection);
+  const sessionLoading =
+    connection === "loading" || salesforceConnection === "loading";
+  const accessibleModules = useMemo(
+    () =>
+      isSalesforce
+        ? salesforceAccessibleModules(salesforceMetadata)
+        : (connection?.accessibleModules ?? []),
+    [isSalesforce, salesforceMetadata, connection]
+  );
+
   useEffect(() => {
+    if (isSalesforce) return;
     if (Array.isArray(connection?.accessibleModules) && scanConfig.modules.length === 0) {
       setScanConfig({
         modules: connection.accessibleModules.map((module) => module.apiName),
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connection]);
+  }, [connection, isSalesforce]);
+
+  useEffect(() => {
+    if (!isSalesforce) {
+      setSalesforceMetadata(null);
+      setMetadataError(null);
+      setLoadingMetadata(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setLoadingMetadata(true);
+    setMetadataError(null);
+    api
+      .getSalesforceMetadata()
+      .then((metadata) => {
+        if (cancelled) return;
+        setSalesforceMetadata(metadata);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSalesforceMetadata(null);
+        setMetadataError(
+          err instanceof Error
+            ? err.message
+            : "Salesforce metadata could not be loaded"
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMetadata(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSalesforce, activeConnection?.connectionId]);
+
+  useEffect(() => {
+    if (!isSalesforce || !salesforceMetadata) return;
+    const modules = salesforceAccessibleModules(salesforceMetadata);
+    const retained = retainedAccessibleModules(scanConfig.modules, modules);
+    if (retained.length === 0) {
+      setScanConfig({ modules: defaultAccessibleModuleNames(modules) });
+      return;
+    }
+    if (retained.length !== scanConfig.modules.length) {
+      setScanConfig({ modules: retained });
+    }
+    // Sync once when Salesforce metadata arrives so persisted Zoho names are
+    // not posted. Do not re-run when the user clears the selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSalesforce, salesforceMetadata]);
 
   useEffect(() => {
     if (!scanConfig.modules.length) {
@@ -93,22 +171,23 @@ export default function SetupScreen() {
       setEstimating(false);
       return;
     }
-    setEstimate(
-      api.estimateScan(scanConfig, connection?.accessibleModules ?? [])
-    );
+    setEstimate(api.estimateScan(scanConfig, accessibleModules));
     setEstimating(false);
-  }, [connection?.accessibleModules, scanConfig]);
+  }, [accessibleModules, scanConfig]);
 
   useEffect(() => {
-    if (connection === "loading" || connection) return;
+    if (sessionLoading) return;
+    if (activeConnection) return;
     dispatch({ type: "showConnect" });
-  }, [connection, dispatch]);
+  }, [sessionLoading, activeConnection, dispatch]);
 
   useEffect(() => {
     if (connecting) {
-      window.location.assign(api.ZOHO_CONSENT_URL);
+      window.location.assign(
+        isSalesforce ? api.SALESFORCE_CONSENT_URL : api.ZOHO_CONSENT_URL
+      );
     }
-  }, [connecting]);
+  }, [connecting, isSalesforce]);
 
   function handleConnect() {
     setConnecting(true);
@@ -125,7 +204,7 @@ export default function SetupScreen() {
     // Leads/Contacts/Deals/Accounts list.
   }
 
-  if (connection === "loading") {
+  if (sessionLoading) {
     return (
       <ContentContainer className="flex min-h-0 w-full flex-1 flex-col py-8">
         <LoadingState label="Checking your connection" />
@@ -136,12 +215,14 @@ export default function SetupScreen() {
   if (connecting) {
     return (
       <ContentContainer className="flex min-h-0 w-full flex-1 flex-col py-8">
-        <LoadingState label="Redirecting to Zoho" />
+        <LoadingState
+          label={isSalesforce ? "Redirecting to Salesforce" : "Redirecting to Zoho"}
+        />
       </ContentContainer>
     );
   }
 
-  if (!connection) {
+  if (!activeConnection || (isZoho && !connection)) {
     return (
       <ContentContainer className="flex min-h-0 w-full flex-1 flex-col py-8">
         <LoadingState label="Checking your connection" />
@@ -149,8 +230,16 @@ export default function SetupScreen() {
     );
   }
 
+  if (isSalesforce && loadingMetadata && !salesforceMetadata) {
+    return (
+      <ContentContainer className="flex min-h-0 w-full flex-1 flex-col py-8">
+        <LoadingState label="Loading Salesforce metadata" />
+      </ContentContainer>
+    );
+  }
+
   function toggleModule(apiName) {
-    const module = connection.accessibleModules.find(
+    const module = accessibleModules.find(
       (candidate) => candidate.apiName === apiName
     );
     if (!module) return;
@@ -161,9 +250,7 @@ export default function SetupScreen() {
 
   function selectAllModules(selectAll) {
     setScanConfig({
-      modules: selectAll
-        ? connection.accessibleModules.map((module) => module.apiName)
-        : [],
+      modules: selectAll ? defaultAccessibleModuleNames(accessibleModules) : [],
     });
   }
 
@@ -201,12 +288,18 @@ export default function SetupScreen() {
     }
   }
 
-  const organizationLabel =
-    connection.organizationName || connection.organizationId || "Zoho CRM";
-  const connectedName =
-    connection.connectedUser?.name || connection.connectedUser?.email;
+  const organizationLabel = isSalesforce
+    ? salesforceOrganizationName(
+        salesforceMetadata,
+        activeConnection.organizationName || "Salesforce"
+      )
+    : connection.organizationName || connection.organizationId || "Zoho CRM";
+  const connectedName = isSalesforce
+    ? activeConnection.connectedUser?.name || activeConnection.connectedUser?.email
+    : connection.connectedUser?.name || connection.connectedUser?.email;
   const moduleCount = scanConfig.modules.length;
-  const canStart = moduleCount > 0 && !starting;
+  const canStart =
+    moduleCount > 0 && !starting && !(isSalesforce && loadingMetadata);
 
   return (
     <ContentContainer className="flex min-h-full min-w-0 flex-col pt-6 @min-[640px]:pt-8">
@@ -218,7 +311,7 @@ export default function SetupScreen() {
                 className="grid size-11 shrink-0 place-items-center bg-brand-soft font-heading text-sm font-semibold tracking-wide text-brand-strong"
                 aria-hidden="true"
               >
-                {orgInitials(organizationLabel)}
+                {orgInitials(organizationLabel, isSalesforce ? "SF" : "ZH")}
               </div>
               <div className="min-w-0">
                 <p className="font-heading text-lg font-semibold tracking-tight text-ink">
@@ -267,8 +360,13 @@ export default function SetupScreen() {
         </SetupSection>
 
         <SetupSection step={3} title="Modules">
+          {metadataError ? (
+            <p className="mb-4 text-[13px] text-risk" role="alert">
+              {metadataError}
+            </p>
+          ) : null}
           <AccessibleModulesList
-            modules={connection.accessibleModules}
+            modules={accessibleModules}
             selected={scanConfig.modules}
             onToggle={toggleModule}
             onSelectAll={selectAllModules}
@@ -283,7 +381,11 @@ export default function SetupScreen() {
               {moduleCount} {moduleCount === 1 ? "module" : "modules"}
             </DockStat>
             <DockStat label="Period">{periodSummary(scanConfig.range)}</DockStat>
-            <CostEstimate estimate={estimate} loading={estimating} />
+            <CostEstimate
+              estimate={estimate}
+              loading={estimating}
+              showApiCredits={!isSalesforce}
+            />
           </dl>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {scanHistory.length > 0 && (

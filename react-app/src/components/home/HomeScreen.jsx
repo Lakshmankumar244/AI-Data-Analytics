@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppState } from "../../state/AppContext";
-import { activateConnection, deleteScan, getScanHistory, getScorecard, ZOHO_CONSENT_URL } from "../../data/client";
+import { activateConnection, advanceScan, deleteScan, getScanHistory, getScorecard, SALESFORCE_CONSENT_URL, ZOHO_CONSENT_URL } from "../../data/client";
 import { connectionSummary, providerLabel } from "../../data/activeConnection";
 import { Trash2 } from "lucide-react";
 import { formatNumber, formatReportPeriod, formatScanTimestamp } from "../../utils/format";
@@ -223,8 +223,17 @@ export default function HomeScreen() {
     }
   }
 
-  function resumeScan(scan) {
+  async function resumeScan(scan) {
     if (!scanHistory.some((item) => item.scanId === scan.scanId)) return;
+    setError(null);
+    try {
+      await advanceScan(scan.scanId);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "The scan could not be resumed"
+      );
+      return;
+    }
     dispatch({
       type: "scanStarted",
       scanId: scan.scanId,
@@ -354,22 +363,35 @@ export default function HomeScreen() {
           </div>
         </div>
       ) : salesforceActive ? (
-        <PageHeader
-          eyebrow={providerLabel("salesforce")}
-          title="Salesforce scanning is not available yet"
-          description="Salesforce is the active connection. Scan setup for Salesforce is not implemented yet, so new scans cannot be started from this workspace. Switch back to a Zoho CRM connection to run scans, or connect another CRM."
-          meta={salesforceSummary || undefined}
-          actions={
+        <div className="mb-8 flex min-w-0 flex-wrap items-end justify-end gap-x-3 gap-y-2">
+          <div className="mr-auto min-w-0">
+            <p className="eyebrow">{providerLabel("salesforce")}</p>
+            <p className="font-heading text-lg font-semibold tracking-tight text-ink">
+              {activeConnection.organizationName || "Salesforce CRM"}
+            </p>
+            {salesforceSummary ? (
+              <p className="mt-0.5 text-[13px] text-ink-soft">{salesforceSummary}</p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="lg"
-              onClick={() => dispatch({ type: "showConnect" })}
+              onClick={() => window.location.assign(SALESFORCE_CONSENT_URL)}
             >
-              Connect to CRM
+              Connect another Salesforce account
             </Button>
-          }
-        />
+            <Button
+              type="button"
+              variant="default"
+              size="lg"
+              onClick={() => dispatch({ type: "showSetup" })}
+            >
+              New scan
+            </Button>
+          </div>
+        </div>
       ) : (
         <PageHeader
           title="Reports"

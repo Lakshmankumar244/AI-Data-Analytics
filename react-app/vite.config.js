@@ -66,4 +66,10 @@ export default defineConfig({
   preview: {
     port: 4173,
   },
+  test: {
+    environment: "jsdom",
+    setupFiles: "./src/test/setup.js",
+    testTimeout: 10000,
+    hookTimeout: 10000,
+  },
 });

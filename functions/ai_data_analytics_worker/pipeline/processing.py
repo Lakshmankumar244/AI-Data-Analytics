@@ -13,6 +13,16 @@ import zipfile
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
+from shared.datastore import (
+    canonical_hash as _canonical_hash,
+    canonical_json as _canonical_json,
+    catalyst_datetime_now as _catalyst_datetime_now,
+    foreign_row_id as _foreign_row_id,
+    insert_rows_in_chunks as _insert_rows_in_chunks,
+    numeric_row_id as _numeric_row_id,
+    query_all_rows as _query_all_rows,
+    query_one as _query_one,
+)
 from worker.profiler import ProfiledApp, ScanProfiler
 
 
@@ -69,52 +79,6 @@ DUPLICATION_FIELDS = {
 FRESHNESS_THRESHOLDS_DAYS = (90, 180, 365)
 
 logger = logging.getLogger(__name__)
-
-
-def _foreign_row_id(value):
-    if isinstance(value, dict):
-        return value.get("ROWID") or value.get("rowid")
-    return value
-
-
-def _numeric_row_id(value, label):
-    row_id = str(_foreign_row_id(value))
-    if not row_id.isdigit():
-        raise ValueError(f"{label} is invalid")
-    return row_id
-
-
-def _query_one(zcql, query, table_name):
-    results = zcql.execute_query(query)
-    return results[0][table_name] if results else None
-
-
-def _query_all_rows(zcql, query_prefix, table_name, page_size=300):
-    rows = []
-    offset = 0
-    while True:
-        results = zcql.execute_query(
-            f"{query_prefix} limit {offset},{page_size}"
-        )
-        page = [item[table_name] for item in results]
-        rows.extend(page)
-        if len(page) < page_size:
-            return rows
-        offset += page_size
-
-
-def _canonical_json(value):
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    )
-
-
-def _canonical_hash(value):
-    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
-
-
-def _catalyst_datetime_now():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _validator_kind(field_name):
@@ -707,11 +671,6 @@ def _record_finding_candidate(
         "displayName": _record_display_name(fields),
         "issues": issues,
     }
-
-
-def _insert_rows_in_chunks(table, rows, chunk_size=100):
-    for start in range(0, len(rows), chunk_size):
-        table.insert_rows(rows[start : start + chunk_size])
 
 
 def _persist_record_findings(app, scan_row, module_row, batch_row, source_checksum, findings):

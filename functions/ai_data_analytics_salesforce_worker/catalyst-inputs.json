@@ -1,0 +1,7 @@
+{
+  "validate_task": {
+    "params": {
+      "taskId": "task_replace_with_a_real_pipeline_task_id"
+    }
+  }
+}

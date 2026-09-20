@@ -13,8 +13,10 @@ from analytics.repository import (
     find_processing_batches,
 )
 from analytics.overview import build_overview
+from analytics.record_export import attach_salesforce_owner_analytics
 from analytics.service import StoredAnalyticsError, build_results, build_status
 from common.core import AuthenticationRequired, get_current_user_id, json_response
+from connections.repository import scan_crm_provider
 
 
 LOGGER = logging.getLogger(__name__)
@@ -36,6 +38,17 @@ def get_scan_status(request, datastore, scan_id):
                 404,
             )
 
+        if (
+            scan_crm_provider(scan_row) == "salesforce"
+            and str(scan_row.get("status") or "") == "CREATED"
+        ):
+            LOGGER.info(
+                "Salesforce scan status is read-only scanId=%s status=CREATED "
+                "crm_provider=salesforce; POST /api/scans/%s/advance enqueues "
+                "ORCHESTRATE_SALESFORCE_SCAN and does not change CREATED to PLANNED",
+                scan_id,
+                scan_id,
+            )
         module_rows = find_module_runs(zcql, scan_row["ROWID"])
         bulk_jobs_by_module = {}
         batches_by_bulk = {}
@@ -74,7 +87,6 @@ def get_scan_status(request, datastore, scan_id):
 
 def get_scan_results(request, datastore, scan_id):
     """Return computed module aggregates without exposing CRM records."""
-    del datastore
     try:
         zcql, scan_row = _owned_scan(request, scan_id)
         if not scan_row:
@@ -84,6 +96,7 @@ def get_scan_results(request, datastore, scan_id):
             )
         result_rows = find_analytics_results(zcql, scan_row["ROWID"])
         payload = build_results(scan_row, result_rows)
+        attach_salesforce_owner_analytics(datastore, zcql, scan_row, payload)
         payload.update(
             build_overview(zcql, scan_row, result_rows, payload.get("modules") or [])
         )

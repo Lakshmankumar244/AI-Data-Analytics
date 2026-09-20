@@ -1,4 +1,5 @@
 import hashlib
+import io
 import logging
 import sys
 import unittest
@@ -74,15 +75,30 @@ class FakeDatastore:
         return self.tables[name]
 
 
+class CatalystFilestoreError(Exception):
+    """Mirrors zcatalyst_sdk.exceptions.CatalystFilestoreError."""
+
+    def __init__(self, code, message):
+        self.code = code
+        super().__init__(message)
+
+
 class FakeFolder:
     def __init__(self, file_id="888"):
         self.file_id = file_id
         self.uploads = []
         self.fail = False
+        self.received_types = []
 
     def upload_file(self, name, file_obj):
         if self.fail:
             raise RuntimeError("filestore unavailable")
+        if not isinstance(file_obj, io.BufferedReader):
+            raise CatalystFilestoreError(
+                "INVALID_FILE_DETAILS",
+                "Code must be an instance of BufferReader and cannot be empty",
+            )
+        self.received_types.append(type(file_obj))
         data = file_obj.read()
         self.uploads.append((name, data))
         return {"id": self.file_id}
@@ -220,7 +236,11 @@ class SalesforceResultDownloadTests(unittest.TestCase):
         self.assertEqual(result["pageCount"], 1)
         self.assertEqual(folder.uploads[0][0], f"bulk_abc_{JOB_ID}.csv")
         self.assertEqual(folder.uploads[0][1].count(HEADER.encode()), 1)
-        updated = datastore.tables["bulk_read_jobs"].updates[0]
+        updated = [
+            row
+            for row in datastore.tables["bulk_read_jobs"].updates
+            if row.get("status") == "DOWNLOADED"
+        ][0]
         self.assertEqual(updated["source_file_id"], "888")
         self.assertEqual(updated["source_file_name"], f"bulk_abc_{JOB_ID}.csv")
         self.assertEqual(updated["source_file_size"], len(folder.uploads[0][1]))
@@ -253,7 +273,14 @@ class SalesforceResultDownloadTests(unittest.TestCase):
         self.assertIn("001B,Beta", combined)
         second_url = get_fn.call_args_list[1].args[0]
         self.assertIn("locator=page-2", second_url)
-        self.assertEqual(datastore.tables["bulk_read_jobs"].updates[0]["downloaded_record_count"], 2)
+        self.assertEqual(
+            [
+                row["downloaded_record_count"]
+                for row in datastore.tables["bulk_read_jobs"].updates
+                if "downloaded_record_count" in row
+            ][-1],
+            2,
+        )
 
     def test_locator_termination_does_not_request_further_pages(self):
         _, _, _, _, get_fn = self._download(
@@ -269,6 +296,7 @@ class SalesforceResultDownloadTests(unittest.TestCase):
         self.assertEqual(folder.uploads[0][1], EMPTY_PAGE)
 
     def test_salesforce_api_error(self):
+        datastore = FakeDatastore()
         with patch(
             "salesforce.client.get_salesforce_access_token",
             return_value=("secret-access-token", INSTANCE),
@@ -282,7 +310,7 @@ class SalesforceResultDownloadTests(unittest.TestCase):
         ):
             with self.assertRaises(SalesforceBulkError) as raised:
                 download_salesforce_query_results(
-                    FakeDatastore(),
+                    datastore,
                     CONNECTION,
                     SCAN,
                     dict(BULK_ROW),
@@ -291,6 +319,10 @@ class SalesforceResultDownloadTests(unittest.TestCase):
                 )
         self.assertEqual(raised.exception.code, "PROVIDER_JOB_NOT_FOUND")
         self.assertNotIn("secret-access-token", str(raised.exception))
+        self.assertEqual(
+            datastore.tables["bulk_read_jobs"].updates[-1]["status"],
+            "DOWNLOAD_RETRYABLE",
+        )
 
     def test_token_refresh_path(self):
         _, _, _, token_fn, get_fn = self._download(
@@ -313,10 +345,36 @@ class SalesforceResultDownloadTests(unittest.TestCase):
         self.assertEqual(artifact["source_file_name"], "account.csv")
         self.assertEqual(folder.uploads[0][0], "account.csv")
         self.assertEqual(folder.uploads[0][1], csv_bytes)
+        self.assertTrue(
+            all(file_type is io.BufferedReader for file_type in folder.received_types)
+        )
+
+    def test_upload_file_requires_buffered_reader_like_catalyst_sdk(self):
+        csv_bytes = combine_salesforce_csv_pages([PAGE_ONE])
+        folder = FakeFolder()
+
+        class BytesReader:
+            def __init__(self, data):
+                self._data = data
+
+            def read(self, size=-1):
+                return self._data
+
+        with self.assertRaises(CatalystFilestoreError) as raised:
+            folder.upload_file("account.csv", BytesReader(csv_bytes))
+        self.assertEqual(raised.exception.code, "INVALID_FILE_DETAILS")
+
+        artifact = persist_salesforce_csv_artifact(
+            FakeDatastore(), BULK_ROW, csv_bytes, folder, "account.csv"
+        )
+        self.assertEqual(artifact["status"], "DOWNLOADED")
+        self.assertEqual(folder.uploads[0][1], csv_bytes)
+        self.assertIs(folder.received_types[0], io.BufferedReader)
 
     def test_file_store_failure(self):
         folder = FakeFolder()
         folder.fail = True
+        datastore = FakeDatastore()
         with patch(
             "salesforce.client.get_salesforce_access_token",
             return_value=("stored-access-token", INSTANCE),
@@ -326,7 +384,7 @@ class SalesforceResultDownloadTests(unittest.TestCase):
         ):
             with self.assertRaises(SalesforceBulkError) as raised:
                 download_salesforce_query_results(
-                    FakeDatastore(),
+                    datastore,
                     CONNECTION,
                     SCAN,
                     dict(BULK_ROW),
@@ -334,6 +392,10 @@ class SalesforceResultDownloadTests(unittest.TestCase):
                     folder=folder,
                 )
         self.assertEqual(raised.exception.code, "FILESTORE_UPLOAD_FAILED")
+        self.assertEqual(
+            datastore.tables["bulk_read_jobs"].updates[-1]["status"],
+            "DOWNLOAD_UNKNOWN",
+        )
 
     def test_no_token_secret_leakage(self):
         records = []
@@ -378,6 +440,71 @@ class SalesforceResultDownloadTests(unittest.TestCase):
         self.assertIn(f"/jobs/query/{JOB_ID}/results", url)
         self.assertIn("locator=abc", url)
         self.assertNotIn("zoho", url)
+
+    def test_already_downloaded_is_idempotent(self):
+        bulk = {
+            **BULK_ROW,
+            "status": "DOWNLOADED",
+            "source_file_id": "888",
+            "source_file_name": "done.csv",
+            "downloaded_record_count": 5,
+        }
+        result, datastore, folder, _, get_fn = self._download(
+            [csv_response(PAGE_ONE, locator="null")],
+            bulk_row=bulk,
+        )
+        self.assertTrue(result["alreadyDownloaded"])
+        self.assertEqual(result["downloadedRecordCount"], 5)
+        get_fn.assert_not_called()
+        self.assertEqual(folder.uploads, [])
+        self.assertNotIn("bulk_read_jobs", datastore.tables)
+
+    def test_downloading_status_blocks_retry(self):
+        with self.assertRaises(SalesforceBulkError) as raised:
+            validate_salesforce_result_download(
+                SCAN,
+                {**BULK_ROW, "status": "DOWNLOADING"},
+                CONNECTION,
+                user_id="user-1",
+            )
+        self.assertEqual(raised.exception.code, "BULK_DOWNLOAD_RETRY_BLOCKED")
+
+    def test_download_unknown_without_source_file_can_retry(self):
+        provider_job_id = validate_salesforce_result_download(
+            SCAN,
+            {**BULK_ROW, "status": "DOWNLOAD_UNKNOWN"},
+            CONNECTION,
+            user_id="user-1",
+        )
+        self.assertEqual(provider_job_id, JOB_ID)
+        result, datastore, folder, _, get_fn = self._download(
+            [csv_response(PAGE_ONE, locator="null")],
+            bulk_row={**BULK_ROW, "status": "DOWNLOAD_UNKNOWN"},
+        )
+        self.assertFalse(result["alreadyDownloaded"])
+        self.assertEqual(result["status"], "DOWNLOADED")
+        get_fn.assert_called_once()
+        self.assertEqual(folder.uploads[0][1], PAGE_ONE)
+        self.assertTrue(
+            any(
+                row.get("status") == "DOWNLOADED"
+                for row in datastore.tables["bulk_read_jobs"].updates
+            )
+        )
+
+    def test_download_unknown_with_source_file_is_blocked(self):
+        with self.assertRaises(SalesforceBulkError) as raised:
+            validate_salesforce_result_download(
+                SCAN,
+                {
+                    **BULK_ROW,
+                    "status": "DOWNLOAD_UNKNOWN",
+                    "source_file_id": "888",
+                },
+                CONNECTION,
+                user_id="user-1",
+            )
+        self.assertEqual(raised.exception.code, "BULK_DOWNLOAD_RETRY_BLOCKED")
 
 
 if __name__ == "__main__":
