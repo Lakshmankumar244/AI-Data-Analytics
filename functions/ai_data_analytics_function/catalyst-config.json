@@ -13,7 +13,6 @@
 					"SALESFORCE_REDIRECT_URI":"https://ai-data-analytics-60083091023.development.catalystserverless.in/server/ai_data_analytics_function/api/salesforce/callback",
 					"SALESFORCE_LOGIN_URL":"https://login.salesforce.com",
 					"BULK_EXPORT_FOLDER_ID":"48465000000078186",
-					"SALESFORCE_CLIENT_ID": "3MVG9GBhY6wQjl2uuJzBRrbOPHSIcV5fKacKyv_l8z8cwkBw0wGTqiazx95QyGm_1duwaWq9S0iH1.zhShD_R",
 					"ANALYTICS_WORKER_JOB_POOL_NAME":"aiDataAnalyticsWorkerPool",
 					"ANALYTICS_WORKER_FUNCTION_NAME":"ai_data_analytics_worker",
 					"SALESFORCE_WORKER_JOB_POOL_NAME":"sfDataAnalyticsWorkerPool",
