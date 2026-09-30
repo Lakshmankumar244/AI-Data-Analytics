@@ -1,146 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../../../state/AppContext";
 import * as api from "../../../data/client";
+import {
+  FIX_PAGE_SIZE,
+  ISSUE_TYPE_FILTERS,
+  SEVERITY_FILTERS,
+  isFixIndexUnavailable,
+} from "../../../data/fixRecords";
+import { groupOwnerAnalytics } from "../../../data/ownerAnalytics";
 import { formatNumber } from "../../../utils/format";
 import LoadingState from "../../shared/LoadingState";
-import { cn } from "@/lib/utils";
-
-const PRIORITY_TONE = {
-  high: {
-    color: "var(--risk)",
-    background: "var(--risk-soft)",
-    label: "High",
-  },
-  medium: {
-    color: "var(--attention)",
-    background: "var(--attention-soft)",
-    label: "Medium",
-  },
-  low: {
-    color: "var(--muted)",
-    background: "var(--surface-sunken)",
-    label: "Low",
-  },
-};
-
-function priorityMeta(priority) {
-  const key = String(priority || "").toLowerCase();
-  return PRIORITY_TONE[key] || PRIORITY_TONE.low;
-}
-
-function PriorityBadge({ priority }) {
-  const tone = priorityMeta(priority);
-  return (
-    <span
-      className="inline-flex shrink-0 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase"
-      style={{ background: tone.background, color: tone.color }}
-    >
-      {tone.label}
-    </span>
-  );
-}
-
-function ActionMeta({ action }) {
-  const facts = [
-    {
-      key: "records",
-      node: (
-        <>
-          <strong className="mono font-semibold tracking-tight text-ink">
-            {formatNumber(action.recordCount)}
-          </strong>{" "}
-          record{action.recordCount === 1 ? "" : "s"}
-        </>
-      ),
-    },
-    action.fieldApiName
-      ? {
-          key: "field",
-          node: (
-            <>
-              Field{" "}
-              <span className="mono text-ink">{action.fieldApiName}</span>
-            </>
-          ),
-        }
-      : null,
-    action.modules?.length
-      ? {
-          key: "module",
-          node: action.modules.join(", "),
-        }
-      : null,
-    typeof action.coverageRate === "number"
-      ? {
-          key: "coverage",
-          node: (
-            <>
-              Coverage{" "}
-              <span className="mono text-ink">
-                {Math.round(action.coverageRate * 100)}%
-              </span>{" "}
-              of module
-            </>
-          ),
-        }
-      : null,
-  ].filter(Boolean);
-
-  if (facts.length === 0) return null;
-
-  return (
-    <p className="mt-1.5 mb-0 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[12px] leading-snug text-ink-muted">
-      {facts.map((fact, index) => (
-        <span key={fact.key} className="inline-flex min-w-0 items-baseline gap-x-3">
-          {index > 0 && (
-            <span className="text-line-strong" aria-hidden="true">
-              ·
-            </span>
-          )}
-          <span className="min-w-0 [overflow-wrap:anywhere]">{fact.node}</span>
-        </span>
-      ))}
-    </p>
-  );
-}
-
-function ActionRow({ action, checked, onToggle }) {
-  const tone = priorityMeta(action.priority);
-
-  return (
-    <li
-      className={cn(
-        "flex gap-3 border-b border-line py-2.5 last:border-b-0",
-        checked && "bg-surface-sunken/70"
-      )}
-      style={{ boxShadow: `inset 3px 0 0 ${tone.color}` }}
-    >
-      <label className="mt-0.5 shrink-0 pl-4 @min-[640px]:pl-5">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={() => onToggle(action.id)}
-          className="size-[17px] accent-brand"
-          aria-label={`Select ${action.title}`}
-        />
-      </label>
-      <div className="min-w-0 flex-1 py-0.5 pr-4 @min-[640px]:pr-5">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="m-0 font-heading text-[15px] leading-snug font-semibold tracking-tight text-ink">
-            {action.title}
-          </h3>
-          <PriorityBadge priority={action.priority} />
-        </div>
-        {action.description && (
-          <p className="mt-1 mb-0 max-w-[72ch] text-[13px] leading-snug text-ink-soft">
-            {action.description}
-          </p>
-        )}
-        <ActionMeta action={action} />
-      </div>
-    </li>
-  );
-}
+import Dropdown from "../../shared/Dropdown";
+import { Button } from "@/components/ui/button";
+import FixKpis from "./FixKpis";
+import FixRecordsTable from "./FixRecordsTable";
+import FixExportButton from "./FixExportButton";
 
 function FixEmpty({ title, children, role }) {
   return (
@@ -157,117 +31,269 @@ function FixEmpty({ title, children, role }) {
   );
 }
 
+function defaultModule(scan) {
+  return String(scan?.moduleFindings?.[0]?.apiName || "").trim();
+}
+
 export default function FixTab() {
-  const { scanId, filterModules } = useAppState();
-  const [plan, setPlan] = useState(null);
-  const [selected, setSelected] = useState(() => new Set());
+  const { scanId, scan } = useAppState();
+  const scannedModules = scan?.moduleFindings ?? [];
+  const owners = useMemo(
+    () => groupOwnerAnalytics(scan?.moduleAnalytics ?? [], []),
+    [scan]
+  );
+  const [module, setModule] = useState(() => defaultModule(scan));
+  const [query, setQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  const [owner, setOwner] = useState("");
+  const [severity, setSeverity] = useState("");
+  const [issueType, setIssueType] = useState("");
+  const [cursor, setCursor] = useState(null);
+  const [cursorStack, setCursorStack] = useState([]);
+  const [data, setData] = useState(null);
+  const [tableLoading, setTableLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [indexUnavailable, setIndexUnavailable] = useState(false);
+
+  const filterKey = `${module}|${submittedQuery}|${owner}|${severity}|${issueType}`;
+  const [activeKey, setActiveKey] = useState(filterKey);
 
   useEffect(() => {
+    setModule((current) => current || defaultModule(scan));
+  }, [scan]);
+
+  useEffect(() => {
+    setModule(defaultModule(scan));
+    setQuery("");
+    setSubmittedQuery("");
+    setOwner("");
+    setSeverity("");
+    setIssueType("");
+    setCursor(null);
+    setCursorStack([]);
+    setData(null);
+  }, [scanId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSubmittedQuery(query.trim()), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    if (filterKey === activeKey) return;
+    setActiveKey(filterKey);
+    setCursor(null);
+    setCursorStack([]);
+  }, [activeKey, filterKey]);
+
+  useEffect(() => {
+    if (!module) {
+      setTableLoading(false);
+      return undefined;
+    }
     let cancelled = false;
-    setPlan(null);
+    setTableLoading(true);
     setError(null);
-    setSelected(new Set());
-    api.getFixPlan(scanId, filterModules)
-      .then((nextPlan) => {
-        if (!cancelled) setPlan(nextPlan);
+    setIndexUnavailable(false);
+    const cursorForRequest = filterKey === activeKey ? cursor : null;
+    api
+      .getFixRecords(scanId, {
+        module,
+        cursor: cursorForRequest,
+        pageSize: FIX_PAGE_SIZE,
+        q: submittedQuery,
+        owners: owner ? [owner] : [],
+        severity,
+        issueType,
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        setData(payload);
+        setTableLoading(false);
       })
       .catch((requestError) => {
-        if (!cancelled) setError(requestError.message);
+        if (cancelled) return;
+        if (isFixIndexUnavailable(requestError)) {
+          setIndexUnavailable(true);
+          setData(null);
+        } else {
+          setError(requestError.message);
+        }
+        setTableLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [scanId, filterModules]);
+  }, [
+    scanId,
+    module,
+    submittedQuery,
+    owner,
+    severity,
+    issueType,
+    cursor,
+    filterKey,
+    activeKey,
+  ]);
 
-  if (error) {
+  const moduleOptions = scannedModules.map((item) => ({
+    id: item.apiName,
+    label: item.label || item.apiName,
+  }));
+  const ownerOptions = [
+    { id: "", label: "All owners" },
+    ...owners.map((item) => ({ id: item.ownerKey, label: item.ownerName })),
+    { id: "__unassigned__", label: "Unassigned" },
+  ];
+
+  if (indexUnavailable) {
     return (
-      <div className="flex min-w-0 flex-col py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
-        <p className="text-[13px] leading-normal text-risk" role="alert">
-          {error}
-        </p>
-      </div>
-    );
-  }
-  if (!plan) return <LoadingState label="Loading remediation plan" />;
-  if (!plan.measured) {
-    return (
-      <FixEmpty title="Remediation was not measured">
-        Run a new scan after deploying record findings.
+      <FixEmpty title="Re-run scan to use Fix" role="status">
+        This scan was finished before the Fix index was available. Run a new scan
+        to review defective records here.
       </FixEmpty>
     );
   }
 
-  function toggle(id) {
-    setSelected((previous) => {
-      const next = new Set(previous);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+  if (!moduleOptions.length) {
+    return (
+      <FixEmpty title="Fix is not available">
+        No scanned modules were found for this report.
+      </FixEmpty>
+    );
   }
 
-  const selectedActions = plan.actions.filter((action) => selected.has(action.id));
-  const selectedRecords = selectedActions.reduce(
-    (sum, action) => sum + action.recordCount,
-    0
-  );
+  const rows = data?.rows ?? [];
+  const columns = data?.columns ?? [];
+  const affected = Number(data?.kpis?.affectedRecordCount) || 0;
+
+  function goNext() {
+    if (!data?.nextCursor) return;
+    setCursorStack((stack) => [...stack, cursor]);
+    setCursor(data.nextCursor);
+  }
+
+  function goPrevious() {
+    const previous = cursorStack[cursorStack.length - 1] ?? null;
+    setCursorStack((stack) => stack.slice(0, -1));
+    setCursor(previous);
+  }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
-      <section className="flex min-w-0 flex-col overflow-hidden rounded-md border border-line bg-surface">
-        <header className="border-b border-line px-4 py-4 @min-[640px]:px-5">
+    <div className="flex min-w-0 flex-col gap-5 py-4 pb-8 @max-[760px]:py-3 @max-[760px]:pb-6">
+      <header className="flex min-w-0 flex-wrap items-end justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-end gap-2">
+          <Dropdown
+            label="Module"
+            value={module}
+            options={moduleOptions}
+            onChange={setModule}
+          />
+          <Dropdown
+            label="Owner"
+            value={owner}
+            options={ownerOptions}
+            onChange={setOwner}
+          />
+          <Dropdown
+            label="Severity"
+            value={severity}
+            options={SEVERITY_FILTERS}
+            onChange={setSeverity}
+          />
+          <Dropdown
+            label="Issue type"
+            value={issueType}
+            options={ISSUE_TYPE_FILTERS}
+            onChange={setIssueType}
+          />
+        </div>
+        <div className="ml-auto flex shrink-0 items-end justify-end">
+          <FixExportButton
+            scanId={scanId}
+            disabled={!module || indexUnavailable}
+            filters={{
+              module,
+              q: submittedQuery,
+              owners: owner ? [owner] : [],
+              severity,
+              issueType,
+            }}
+          />
+        </div>
+      </header>
+
+      {data ? <FixKpis kpis={data.kpis} /> : null}
+
+      <section className="flex min-w-0 flex-col rounded-md border border-line bg-surface p-5 @min-[640px]:p-6">
+        <div className="mb-4 flex min-w-0 flex-wrap items-center justify-between gap-3">
           <h2 className="font-heading text-xl font-semibold tracking-tight text-ink">
-            Remediation plan
+            Fix · {formatNumber(affected)}
           </h2>
-          <p className="mt-1 mb-0 text-sm text-ink-muted">
-            {formatNumber(plan.actionCount)} recommendation
-            {plan.actionCount === 1 ? "" : "s"}
-          </p>
-        </header>
+          <form
+            className="ml-auto min-w-0 @max-[760px]:w-full"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSubmittedQuery(query.trim());
+            }}
+          >
+            <input
+              type="search"
+              value={query}
+              placeholder="Search records..."
+              aria-label="Search records"
+              onChange={(event) => setQuery(event.target.value)}
+              className="min-h-[34px] w-[min(280px,100%)] border border-line bg-paper px-2.5 py-1.5 text-[13px] text-ink placeholder:text-ink-muted @max-[760px]:w-full"
+            />
+          </form>
+        </div>
 
-        {plan.actions.length === 0 ? (
-          <p className="m-0 max-w-[46ch] px-4 py-6 text-sm leading-relaxed text-ink-soft @min-[640px]:px-5">
-            No completeness or validity actions were found.
+        {error ? (
+          <p className="text-[13px] leading-normal text-risk" role="alert">
+            {error}
           </p>
+        ) : tableLoading || !data ? (
+          <LoadingState label="Loading records" />
+        ) : rows.length === 0 ? (
+          <div className="py-8">
+            <p className="font-heading text-lg font-semibold tracking-tight text-ink">
+              No matching records
+            </p>
+            <p className="mt-1.5 max-w-[46ch] text-sm leading-relaxed text-ink-muted">
+              No defective records match the selected filters.
+            </p>
+          </div>
         ) : (
-          <ul className="m-0 list-none p-0">
-            {plan.actions.map((action) => (
-              <ActionRow
-                key={action.id}
-                action={action}
-                checked={selected.has(action.id)}
-                onToggle={toggle}
-              />
-            ))}
-          </ul>
-        )}
-
-        {plan.omittedActionCount > 0 && (
-          <p className="m-0 border-t border-line px-4 py-3 text-[13px] leading-relaxed text-ink-muted @min-[640px]:px-5">
-            Showing the 30 highest-priority actions. {formatNumber(plan.omittedActionCount)} lower-priority actions are omitted.
-          </p>
+          <>
+            <FixRecordsTable columns={columns} rows={rows} />
+            <footer className="mt-4 flex flex-wrap items-center justify-end gap-3 @max-[760px]:flex-col @max-[760px]:items-stretch">
+              <span className="mr-auto text-[13px] text-ink-muted @max-[760px]:mr-0">
+                {formatNumber(rows.length)} record{rows.length === 1 ? "" : "s"} on this page
+              </span>
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={cursorStack.length === 0 && !cursor}
+                  onClick={goPrevious}
+                >
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!data.hasMore || rows.length === 0}
+                  onClick={goNext}
+                >
+                  Next
+                </Button>
+              </div>
+            </footer>
+          </>
         )}
       </section>
-
-      {plan.actions.length > 0 && (
-        <div className="sticky bottom-0 z-10 flex items-center justify-between gap-x-4 gap-y-1 rounded-md border border-line bg-surface px-4 py-3 @max-[760px]:flex-col @max-[760px]:items-start @min-[640px]:px-5">
-          <p className="m-0 flex min-w-0 flex-wrap items-baseline gap-x-2.5 text-[13px] font-semibold text-ink">
-            <span>
-              {selected.size} action{selected.size === 1 ? "" : "s"} selected
-            </span>
-            <span className="font-normal text-line-strong" aria-hidden="true">
-              |
-            </span>
-            <span>
-              {formatNumber(selectedRecords)} record
-              {selectedRecords === 1 ? "" : "s"}
-            </span>
-          </p>
-          <p className="m-0 text-[12px] text-ink-muted">
-            Records may overlap between actions.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

@@ -147,6 +147,16 @@ class FakeTable:
         self.inserts.append(stored)
         return stored
 
+    def insert_rows(self, rows):
+        return [self.insert_row(row) for row in rows]
+
+    def delete_rows(self, row_ids):
+        ids = {str(row_id) for row_id in row_ids}
+        self.inserts = [
+            row for row in self.inserts if str(row.get("ROWID")) not in ids
+        ]
+        return list(row_ids)
+
     def update_row(self, row):
         if self.fail_on and self.fail_on(row):
             raise RuntimeError("persist failed")
@@ -211,6 +221,35 @@ class FakeExportFolder:
 
     def get_file_stream(self, file_id):
         return FakeExportStream(self.files[str(file_id)])
+
+
+class FakeStratusBucket:
+    def __init__(self):
+        self.uploads = []
+        self.objects = {}
+        self.deleted_paths = []
+        self.fail = False
+
+    def put_object(self, key, body, options=None):
+        if options and options.get("extract_upload"):
+            raise AssertionError("extract_upload must not be used")
+        if self.fail:
+            raise RuntimeError("stratus unavailable")
+        data = body.read() if hasattr(body, "read") else body
+        self.uploads.append((key, data, type(body)))
+        self.objects[key] = data
+        return True
+
+    def get_object(self, key):
+        return self.objects[key]
+
+    def delete_path(self, path):
+        self.deleted_paths.append(path)
+        prefix = str(path)
+        for key in list(self.objects):
+            if key.startswith(prefix):
+                del self.objects[key]
+        return {"deleted": True}
 
 
 class FakeZcql:
@@ -346,7 +385,21 @@ class FakeZcql:
         if "from analytics_results" in query:
             return []
         if "from record_quality_findings" in query:
-            return []
+            rows = self._merged_table("record_quality_findings")
+            batch_match = re.search(r"processing_batch_row_id = (\d+)", query)
+            if batch_match:
+                batch_id = batch_match.group(1)
+                rows = [
+                    row
+                    for row in rows
+                    if str(row.get("processing_batch_row_id")) == batch_id
+                ]
+            limit_match = re.search(r"limit (\d+),(\d+)", query)
+            if limit_match:
+                offset = int(limit_match.group(1))
+                size = int(limit_match.group(2))
+                rows = rows[offset : offset + size]
+            return [{"record_quality_findings": row} for row in rows]
         if "from zoho_connection_users" in query:
             return []
         if "from salesforce_connection_owners" in query:
@@ -367,7 +420,9 @@ class FakeApp:
             job=self._job, cron=None, CRON=None
         )
         self._folder = FakeExportFolder()
+        self._bucket = FakeStratusBucket()
         self._filestore = types.SimpleNamespace(folder=lambda _id: self._folder)
+        self._stratus = types.SimpleNamespace(bucket=lambda _name: self._bucket)
 
     def zcql(self):
         return self._zcql
@@ -381,6 +436,9 @@ class FakeApp:
 
     def filestore(self):
         return self._filestore
+
+    def stratus(self):
+        return self._stratus
 
 
 class FakeJobRequest:
@@ -1473,6 +1531,7 @@ class SalesforceWorkerDownloadProcessTests(SalesforceWorkerTaskResolutionTests):
             {
                 **WORKER_ENV,
                 "BULK_EXPORT_FOLDER_ID": "12345",
+                "STRATUS_BUCKET_NAME": "crm-extracts",
             },
             clear=False,
         )
@@ -1740,17 +1799,40 @@ class SalesforceWorkerDownloadProcessTests(SalesforceWorkerTaskResolutionTests):
         posted.assert_not_called()
         result_gets = _bulk_result_get_calls(gotten)
         self.assertEqual(len(result_gets), 1)
-        self.assertTrue(app._folder.uploads)
+        self.assertTrue(app._bucket.uploads)
+        self.assertFalse(app._folder.uploads)
+        extract_uploads = [
+            (name, data)
+            for name, data, _body_type in app._bucket.uploads
+            if str(name).endswith(".csv") or str(name).endswith(".zip")
+        ]
+        sidecar_uploads = [
+            name
+            for name, _data, _body_type in app._bucket.uploads
+            if str(name).endswith(".jsonl")
+        ]
         self.assertTrue(
-            all(
-                isinstance(name, str) and data == ACCOUNT_CSV
-                for name, data in app._folder.uploads
-            )
+            extract_uploads
+            and all(data == ACCOUNT_CSV for _name, data in extract_uploads)
+        )
+        self.assertTrue(
+            any(str(name).startswith("exports/") for name, _data in extract_uploads)
+        )
+        self.assertTrue(sidecar_uploads)
+        self.assertTrue(
+            all("/fix/" in str(name) for name in sidecar_uploads)
         )
         self.assertTrue(
             any(
-                row.get("status") == "DOWNLOADED" and row.get("source_file_id")
+                row.get("status") == "DOWNLOADED" and row.get("source_file_key")
                 for row in app._datastore.tables["bulk_read_jobs"].updates
+            )
+        )
+        self.assertFalse(
+            any(
+                row.get("source_file_id")
+                for row in app._datastore.tables["bulk_read_jobs"].updates
+                if row.get("status") == "DOWNLOADED"
             )
         )
 

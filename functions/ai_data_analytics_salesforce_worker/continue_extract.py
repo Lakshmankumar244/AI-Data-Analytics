@@ -35,6 +35,7 @@ RETRYABLE_DOWNLOAD_CODES = frozenset(
         "SALESFORCE_BULK_RESULTS_FAILED",
         "TOKEN_REFRESH_FAILED",
         "BULK_EXPORT_FOLDER_NOT_CONFIGURED",
+        "STRATUS_BUCKET_NOT_CONFIGURED",
         "FILESTORE_UPLOAD_FAILED",
     }
 )
@@ -116,19 +117,13 @@ def continue_salesforce_extract(app, resolved):
                 pipeline_task_status="RUNNING",
             )
             try:
-                folder = None
-                filestore = getattr(app, "filestore", None)
-                if callable(filestore):
-                    folder_id = __import__("os").environ.get("BULK_EXPORT_FOLDER_ID", "")
-                    if str(folder_id).isdigit():
-                        folder = filestore().folder(int(folder_id))
                 downloaded = download_salesforce_query_results(
                     datastore,
                     connection_row,
                     scan_row,
                     bulk_row,
-                    folder=folder,
                     module_row=module_row,
+                    app=app,
                 )
             except SalesforceBulkError as exc:
                 retryable = exc.code in RETRYABLE_DOWNLOAD_CODES or exc.code not in {
@@ -166,7 +161,7 @@ def continue_salesforce_extract(app, resolved):
             bulk_row.update(
                 {
                     "status": "DOWNLOADED",
-                    "source_file_id": downloaded.get("sourceFileId"),
+                    "source_file_key": downloaded.get("sourceFileKey"),
                     "source_file_name": downloaded.get("sourceFileName"),
                     "source_file_size": downloaded.get("sourceFileSize"),
                     "source_file_checksum": downloaded.get("sourceFileChecksum"),

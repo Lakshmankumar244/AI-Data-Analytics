@@ -58,3 +58,9 @@ def query_all_rows(zcql, query_prefix, table_name, page_size=300):
 def insert_rows_in_chunks(table, rows, chunk_size=100):
     for start in range(0, len(rows), chunk_size):
         table.insert_rows(rows[start : start + chunk_size])
+
+
+def delete_rows_in_chunks(table, row_ids, chunk_size=200):
+    ids = [int(row_id) for row_id in row_ids]
+    for start in range(0, len(ids), chunk_size):
+        table.delete_rows(ids[start : start + chunk_size])

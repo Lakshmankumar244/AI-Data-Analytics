@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "name": "ai-data-analytics-functions",
+  "scripts": {
+    "sync-shared": "node _shared/sync_into_workers.js"
+  }
+}

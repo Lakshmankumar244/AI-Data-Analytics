@@ -1,4 +1,4 @@
-"""Download a completed Bulk Read ZIP and store it in Catalyst File Store."""
+"""Download a completed Bulk Read ZIP and store it in private Stratus."""
 
 import hashlib
 import json
@@ -29,13 +29,19 @@ from common.core import (
 from connections.access import resolve_action_connection
 from connections.token import get_connection_access_token
 from common.profiler import profile_stage
+from storage.extract_store import (
+    build_object_key,
+    bucket_name,
+    put_extract,
+)
+from storage.locator import has_extract_locator
 
 logger = logging.getLogger(__name__)
 
 def download_bulk_read_result(
     request: Request, datastore, scan_id: str, bulk_job_id: str, connection_row=None
 ):
-    """Download one completed Zoho result and persist its ZIP in File Store."""
+    """Download one completed Zoho result and persist its ZIP in Stratus."""
     zcql = zcatalyst_sdk.initialize().zcql()
     safe_scan_id = scan_id.replace("'", "''")
     scan_results = zcql.execute_query(
@@ -109,14 +115,15 @@ def download_bulk_read_result(
         )
 
     bulk_status = bulk_row.get("status")
-    if bulk_status == "DOWNLOADED" and bulk_row.get("source_file_id"):
+    if bulk_status == "DOWNLOADED" and has_extract_locator(bulk_row):
         return json_response(
             {
                 "scanId": scan_id,
                 "bulkJobId": bulk_job_id,
                 "module": module_row["module_api_name"],
                 "status": "DOWNLOADED",
-                "sourceFileId": bulk_row["source_file_id"],
+                "sourceFileId": bulk_row.get("source_file_id") or "",
+                "sourceFileKey": bulk_row.get("source_file_key") or "",
                 "sourceFileName": bulk_row.get("source_file_name"),
                 "sourceFileSize": int(bulk_row.get("source_file_size") or 0),
                 "sourceFileChecksum": bulk_row.get("source_file_checksum"),
@@ -160,13 +167,12 @@ def download_bulk_read_result(
             },
             409,
         )
-    folder_id_value = os.environ.get("BULK_EXPORT_FOLDER_ID", "")
-    if not folder_id_value.isdigit():
+    if not bucket_name():
         return json_response(
             {
                 "error": {
-                    "code": "BULK_EXPORT_FOLDER_NOT_CONFIGURED",
-                    "message": "The Bulk Read export folder is not configured",
+                    "code": "STRATUS_BUCKET_NOT_CONFIGURED",
+                    "message": "The Stratus extract bucket is not configured",
                 }
             },
             500,
@@ -305,20 +311,18 @@ def download_bulk_read_result(
             try:
                 with profile_stage(
                     "extraction",
-                    "filestore_upload",
+                    "stratus_upload",
                     scanId=scan_id,
                     bulkJobId=bulk_job_id,
                     sourceFileSize=source_size,
                 ):
-                    filestore = zcatalyst_sdk.initialize().filestore()
-                    folder = filestore.folder(int(folder_id_value))
+                    source_file_key = build_object_key(
+                        scan_id, bulk_job_id, zoho_job_id, "zip"
+                    )
                     with open(temp_path, "rb") as source_file:
-                        uploaded_file = folder.upload_file(file_name, source_file)
-                    source_file_id = uploaded_file.get("id")
-                    if not source_file_id:
-                        raise ValueError("File Store did not return a file identifier")
+                        put_extract(source_file_key, source_file)
             except Exception as exc:  # noqa: BLE001 - upload outcome can be ambiguous
-                logger.exception("File Store upload failed for %s: %s", bulk_job_id, exc)
+                logger.exception("Stratus upload failed for %s: %s", bulk_job_id, exc)
                 bulk_table.update_row(
                     {
                         "ROWID": bulk_row["ROWID"],
@@ -345,7 +349,7 @@ def download_bulk_read_result(
                     {
                         "ROWID": bulk_row["ROWID"],
                         "status": "DOWNLOADED",
-                        "source_file_id": str(source_file_id),
+                        "source_file_key": source_file_key,
                         "source_file_name": file_name,
                         "source_file_size": source_size,
                         "source_file_checksum": source_checksum,
@@ -356,10 +360,10 @@ def download_bulk_read_result(
                 module_table.update_row(
                     {"ROWID": module_row["ROWID"], "status": "DOWNLOADED"}
                 )
-            except Exception as exc:  # noqa: BLE001 - uploaded file already exists
+            except Exception as exc:  # noqa: BLE001 - uploaded object already exists
                 logger.exception(
-                    "File %s uploaded but metadata persistence failed for %s: %s",
-                    source_file_id,
+                    "Object %s uploaded but metadata persistence failed for %s: %s",
+                    source_file_key,
                     bulk_job_id,
                     exc,
                 )
@@ -379,7 +383,7 @@ def download_bulk_read_result(
                             "code": "FILESTORE_METADATA_PERSIST_FAILED",
                             "message": "The ZIP was stored but its metadata could not be saved",
                         },
-                        "sourceFileId": str(source_file_id),
+                        "sourceFileKey": source_file_key,
                         "crmApiCalls": 1,
                         "creditsConsumed": 1,
                     },
@@ -419,7 +423,8 @@ def download_bulk_read_result(
             "bulkJobId": bulk_job_id,
             "module": module_row["module_api_name"],
             "status": "DOWNLOADED",
-            "sourceFileId": str(source_file_id),
+            "sourceFileId": "",
+            "sourceFileKey": source_file_key,
             "sourceFileName": file_name,
             "sourceFileSize": source_size,
             "sourceFileChecksum": source_checksum,

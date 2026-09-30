@@ -57,6 +57,17 @@ ZOHO_SHARED_FILES = (
     ("orchestration", ("choose.py",)),
     ("common", ("profiler.py",)),
 )
+SHARED_STORAGE = SHARED_ROOT / "storage"
+STORAGE_FILES = (
+    "__init__.py",
+    "extract_store.py",
+    "locator.py",
+)
+STORAGE_PACKAGES = (
+    HTTP_FUNCTION,
+    ZOHO_WORKER,
+    FUNCTIONS_ROOT / "ai_data_analytics_salesforce_worker",
+)
 
 
 def sync_shared_worker():
@@ -115,11 +126,29 @@ def sync_shared_zoho():
     return copied
 
 
+def sync_shared_storage():
+    if not SHARED_STORAGE.is_dir():
+        raise FileNotFoundError(f"Shared storage source missing: {SHARED_STORAGE}")
+    copied = []
+    for dest_root in STORAGE_PACKAGES:
+        dest_dir = dest_root / "storage"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        for name in STORAGE_FILES:
+            source = SHARED_STORAGE / name
+            if not source.is_file():
+                raise FileNotFoundError(f"Shared storage module missing: {source}")
+            target = dest_dir / name
+            shutil.copy2(source, target)
+            copied.append(target)
+    return copied
+
+
 def sync_shared_source():
     return {
         "worker": sync_shared_worker(),
         "salesforce": sync_shared_salesforce(),
         "zoho": sync_shared_zoho(),
+        "storage": sync_shared_storage(),
     }
 
 
@@ -145,6 +174,14 @@ def packaged_copies_match_source():
                     mismatches.append(f"missing from {dest_root}: {package}/{name}")
                 elif source.read_bytes() != target.read_bytes():
                     mismatches.append(f"differs in {dest_root}: {package}/{name}")
+    for dest_root in STORAGE_PACKAGES:
+        for name in STORAGE_FILES:
+            source = SHARED_STORAGE / name
+            target = dest_root / "storage" / name
+            if not target.is_file():
+                mismatches.append(f"missing from {dest_root}: storage/{name}")
+            elif source.read_bytes() != target.read_bytes():
+                mismatches.append(f"differs in {dest_root}: storage/{name}")
     return mismatches
 
 
@@ -175,3 +212,5 @@ if __name__ == "__main__":
         print(f"packaged shared Salesforce module into {dest}")
     for dest in result["zoho"]:
         print(f"packaged shared Zoho module into {dest}")
+    for dest in result["storage"]:
+        print(f"packaged shared storage module into {dest}")

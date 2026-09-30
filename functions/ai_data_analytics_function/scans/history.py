@@ -5,6 +5,11 @@ import logging
 import zcatalyst_sdk
 
 from common.core import AuthenticationRequired, get_current_user_id, json_response
+from installations.authorization import list_accessible_connections
+from installations.repository import (
+    SALESFORCE_CONNECTIONS_TABLE,
+    ZOHO_CONNECTIONS_TABLE,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -22,21 +27,17 @@ def _integer(value):
 
 
 def list_scans(request, datastore):
-    """Return recent scans belonging only to the current Catalyst user."""
+    """Return recent scans the caller may access through dual-read authorization."""
     del datastore
     try:
         zcql = zcatalyst_sdk.initialize().zcql()
-        user_id = get_current_user_id(request).replace("'", "''")
+        user_id = get_current_user_id(request)
         scans = []
         for table_name, provider in (
-            ("zoho_connections", "zoho"),
-            ("salesforce_connections", "salesforce"),
+            (ZOHO_CONNECTIONS_TABLE, "zoho"),
+            (SALESFORCE_CONNECTIONS_TABLE, "salesforce"),
         ):
-            connections = _rows(
-                zcql,
-                f"select * from {table_name} where user_id = '{user_id}'",
-                table_name,
-            )
+            connections = list_accessible_connections(zcql, table_name, user_id)
             for connection in connections:
                 connection_row_id = int(connection["ROWID"])
                 connection_scans = _rows(

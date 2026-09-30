@@ -15,6 +15,7 @@ from analytics.repository import (
 from analytics.overview import build_overview
 from analytics.record_export import attach_salesforce_owner_analytics
 from analytics.service import StoredAnalyticsError, build_results, build_status
+from analytics.fix_records import get_fix_records
 from common.core import AuthenticationRequired, get_current_user_id, json_response
 from connections.repository import scan_crm_provider
 

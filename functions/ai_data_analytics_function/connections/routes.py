@@ -5,12 +5,14 @@ import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 import zcatalyst_sdk
 from flask import Request, make_response, redirect
 
 from common.core import (
+    AuthenticationRequired,
     DiscoveryError,
     STATE_TTL_MINUTES,
     ZOHO_SCOPE,
@@ -26,7 +28,13 @@ from connections.activation import (
     ZOHO_CONNECTIONS_TABLE,
     activate_exclusive_connection,
 )
-from connections.repository import connection_is_active, find_connected_connection
+from connections.marketplace import persist_marketplace_zoho_oauth_connection
+from connections.repository import connection_is_active
+from installations.authorization import (
+    find_accessible_connected_connection_by_id,
+    list_accessible_connected_connections,
+)
+from installations.repository import connection_row_for_persist
 from zoho.client import (
     fetch_accessible_modules,
     fetch_organization_metadata,
@@ -35,6 +43,10 @@ from zoho.client import (
 logger = logging.getLogger(__name__)
 
 LEGACY_DEVELOPMENT_USER_ID = "dev-user-1"
+MARKETPLACE_OAUTH_STATE_MARK = "__marketplace_oauth__"
+REACT_APP_PATH = "/app/"
+MARKETPLACE_ENTRY_SOURCE = "marketplace"
+MARKETPLACE_ENTRY_COOKIE = "dhs-marketplace-entry"
 
 
 def _escape_zcql(value):
@@ -102,6 +114,122 @@ def start_consent(request: Request, datastore):
     return redirect(f"{accounts_url}/oauth/v2/auth?{query}")
 
 
+def start_marketplace_consent(request: Request, datastore):
+    """Start Zoho OAuth for the Marketplace path without changing standalone consent.
+
+    Catalyst authentication is required. Query org/user values are not trusted
+    and are not used to choose the OAuth user or tenant.
+    """
+    user_id = get_current_user_id(request)
+    state = secrets.token_urlsafe(32)
+    expires_at = to_catalyst_datetime(
+        datetime.now(timezone.utc) + timedelta(minutes=STATE_TTL_MINUTES)
+    )
+    datastore.table("oauth_states").insert_row(
+        {
+            "state": state,
+            "user_id": user_id,
+            "redirect_path": MARKETPLACE_OAUTH_STATE_MARK,
+            "expires_at": expires_at,
+        }
+    )
+    accounts_url = os.environ["ZOHO_ACCOUNTS_URL"]
+    params = {
+        "scope": ZOHO_SCOPE,
+        "client_id": os.environ["ZOHO_CLIENT_ID"],
+        "response_type": "code",
+        "access_type": "offline",
+        "redirect_uri": os.environ["ZOHO_REDIRECT_URI"],
+        "state": state,
+        "prompt": "consent",
+    }
+    query = "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in params.items())
+    return redirect(f"{accounts_url}/oauth/v2/auth?{query}")
+
+
+def _is_marketplace_oauth_state(state_row):
+    return str((state_row or {}).get("redirect_path") or "") == MARKETPLACE_OAUTH_STATE_MARK
+
+
+def marketplace_frontend_return_url(frontend_url: str) -> str:
+    """Return Marketplace OAuth to the existing React app. Query is UX-only."""
+    parts = urlsplit(str(frontend_url or "").strip())
+    path = parts.path or "/"
+    normalized = path.rstrip("/")
+    if normalized.endswith("/app"):
+        path = f"{normalized}/"
+    else:
+        path = f"{normalized}{REACT_APP_PATH}" if normalized else REACT_APP_PATH
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query["source"] = MARKETPLACE_ENTRY_SOURCE
+    return urlunsplit(
+        (parts.scheme, parts.netloc, path, urlencode(query), parts.fragment)
+    )
+
+
+def _marketplace_login_url(frontend_url: str) -> str:
+    parts = urlsplit(str(frontend_url or "").strip())
+    origin = urlunsplit((parts.scheme, parts.netloc, "", "", ""))
+    return f"{origin}/__catalyst/auth/login"
+
+
+def enter_marketplace(request: Request):
+    """Mark Marketplace entry before Catalyst login_redirect can drop the query.
+
+    Query org/user values are ignored. The cookie is a UX flag only.
+    """
+    del request
+    frontend_url = os.environ.get("FRONTEND_SETUP_URL", "")
+    try:
+        get_current_user_id()
+        destination = marketplace_frontend_return_url(frontend_url)
+    except AuthenticationRequired:
+        destination = _marketplace_login_url(frontend_url)
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "<title>CRM Data Health Scanner</title></head><body>"
+        "<p>Opening CRM Data Health Scanner…</p>"
+        "<script>(function(){"
+        "var target=" + json.dumps(destination) + ";"
+        "try{if(window.top!==window.self){window.top.location.replace(window.location.href);return;}}"
+        "catch(e){try{window.open(window.location.href,'_top');return;}catch(err){}}"
+        "try{sessionStorage.setItem('dhs-marketplace-entry','1');}catch(e){}"
+        "var secure=location.protocol==='https:'?'; Secure':'';"
+        "document.cookie='dhs-marketplace-entry=1; path=/; SameSite=Lax'+secure;"
+        "window.location.replace(target);"
+        "})();</script></body></html>"
+    )
+    return make_response(
+        html,
+        200,
+        {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-store",
+            "Set-Cookie": f"{MARKETPLACE_ENTRY_COOKIE}=1; Path=/; SameSite=Lax; Secure",
+        },
+    )
+
+
+def _zoho_oauth_connection_fields(organization, profile, tokens, modules, token_expires_at):
+    return {
+        "zoho_org_id": organization["id"],
+        "organization_name": organization.get("company_name", ""),
+        "zoho_user_id": profile["user_id"],
+        "connected_email": profile.get("email", ""),
+        "connected_name": profile.get("full_name", ""),
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens["refresh_token"],
+        "token_expires_at": token_expires_at,
+        "scope": tokens.get("scope", ZOHO_SCOPE),
+        "status": "connected",
+        "last_error": "",
+        "accessible_modules": json.dumps(modules),
+        "modules_synced_at": to_catalyst_datetime(datetime.now(timezone.utc)),
+        "is_active": True,
+        "last_selected_at": to_catalyst_column_datetime(datetime.now(timezone.utc)),
+    }
+
+
 def handle_callback(request: Request, datastore):
     zcql = zcatalyst_sdk.initialize().zcql()
     frontend_url = os.environ["FRONTEND_SETUP_URL"]
@@ -118,6 +246,8 @@ def handle_callback(request: Request, datastore):
         return redirect(with_fragment_parameter(frontend_url, "zoho_error", "invalid_state"))
 
     state_row = state_rows[0]["oauth_states"]
+    if _is_marketplace_oauth_state(state_row):
+        frontend_url = marketplace_frontend_return_url(frontend_url)
     expires_at = from_catalyst_datetime(state_row["expires_at"])
     if datetime.now(timezone.utc) > expires_at or state_row.get("consumed_at"):
         return redirect(with_fragment_parameter(frontend_url, "zoho_error", "expired_state"))
@@ -162,28 +292,20 @@ def handle_callback(request: Request, datastore):
         to_catalyst_datetime(
     datetime.now(timezone.utc) + timedelta(seconds=tokens["expires_in"]))
     )
-
-    upsert_connection(
-        datastore,
-        user_id,
-        {
-            "zoho_org_id": organization["id"],
-            "organization_name": organization.get("company_name", ""),
-            "zoho_user_id": profile["user_id"],
-            "connected_email": profile.get("email", ""),
-            "connected_name": profile.get("full_name", ""),
-            "access_token": tokens["access_token"],
-            "refresh_token": tokens["refresh_token"],
-            "token_expires_at": token_expires_at,
-            "scope": tokens.get("scope", ZOHO_SCOPE),
-            "status": "connected",
-            "last_error": "",
-            "accessible_modules": json.dumps(modules),
-            "modules_synced_at": to_catalyst_datetime(datetime.now(timezone.utc)),
-            "is_active": True,
-            "last_selected_at": to_catalyst_column_datetime(datetime.now(timezone.utc)),
-        },
+    connection_fields = _zoho_oauth_connection_fields(
+        organization, profile, tokens, modules, token_expires_at
     )
+    if _is_marketplace_oauth_state(state_row):
+        persist_marketplace_zoho_oauth_connection(
+            datastore,
+            zcql,
+            user_id,
+            organization,
+            profile,
+            connection_fields,
+        )
+    else:
+        upsert_connection(datastore, user_id, connection_fields)
 
     return redirect(with_fragment_parameter(frontend_url, "zoho_connected", "1"))
 
@@ -213,7 +335,7 @@ def upsert_connection(datastore, user_id: str, fields: dict):
         ),
         None,
     )
-    row_data = {"user_id": user_id, **fields}
+    row_data = connection_row_for_persist(user_id, fields)
 
     if target:
         row_data["ROWID"] = target["ROWID"]
@@ -272,24 +394,20 @@ def get_connection(request: Request, datastore):
     user_id = str(user["user_id"])
     legacy_migrated = migrate_legacy_connection(datastore, user)
 
-    row = find_connected_connection(zcql, user_id)
-    if not row:
-        return make_response(json.dumps(None), 200, {"Content-Type": "application/json"})
-
-    all_rows = zcql.execute_query(
-        "select * from zoho_connections where "
-        f"user_id = '{_escape_zcql(user_id)}' and status = 'connected'"
+    all_rows = list_accessible_connected_connections(
+        zcql, ZOHO_CONNECTIONS_TABLE, user_id
     )
+    if not all_rows:
+        return make_response(json.dumps(None), 200, {"Content-Type": "application/json"})
+    row = all_rows[0]
     available_connections = [
         {
-            "connectionId": str(item["zoho_connections"]["ROWID"]),
-            "organizationId": str(item["zoho_connections"].get("zoho_org_id") or ""),
-            "organizationName": str(
-                item["zoho_connections"].get("organization_name") or ""
-            ),
-            "name": str(item["zoho_connections"].get("connected_name") or ""),
-            "email": str(item["zoho_connections"].get("connected_email") or ""),
-            "isActive": connection_is_active(item["zoho_connections"]),
+            "connectionId": str(item["ROWID"]),
+            "organizationId": str(item.get("zoho_org_id") or ""),
+            "organizationName": str(item.get("organization_name") or ""),
+            "name": str(item.get("connected_name") or ""),
+            "email": str(item.get("connected_email") or ""),
+            "isActive": connection_is_active(item),
         }
         for item in all_rows
     ]
@@ -338,16 +456,11 @@ def activate_connection(request: Request, datastore, connection_row_id: str):
 
     user_id = get_current_user_id(request)
     zcql = zcatalyst_sdk.initialize().zcql()
-    rows = zcql.execute_query(
-        "select * from zoho_connections where "
-        f"ROWID = {connection_row_id} "
-        f"and user_id = '{_escape_zcql(user_id)}' "
-        "and status = 'connected' limit 1"
+    selected = find_accessible_connected_connection_by_id(
+        zcql, ZOHO_CONNECTIONS_TABLE, connection_row_id, user_id
     )
-    if not rows:
+    if not selected:
         return make_response("Not found", 404)
-
-    selected = rows[0]["zoho_connections"]
     try:
         activate_exclusive_connection(
             datastore,

@@ -30,7 +30,13 @@ MAX_PAGE = 10000
 QUERY_BATCH_SIZE = 300
 FINDING_IDS_PER_ISSUE_QUERY = 8
 SUPPORTED_RECORD_FINDING_SCHEMAS = frozenset(
-    {"record-findings-v1", "record-findings-v2", "record-findings-v3", "record-findings-v4"}
+    {
+        "record-findings-v1",
+        "record-findings-v2",
+        "record-findings-v3",
+        "record-findings-v4",
+        "record-findings-v5",
+    }
 )
 LISTABLE_STATES = ("incomplete", "inaccurate", "proper")
 FLAGGED_STATES = frozenset({"incomplete", "inaccurate"})
@@ -235,21 +241,17 @@ def _finding_scope_conditions(scan_row, schema_version, modules, owners):
     return conditions
 
 
-def _listed_state_counts(zcql, conditions):
-    counts = _empty_listed_states()
-    rows = _all_rows(
-        zcql,
-        "select missing_count,invalid_count from record_quality_findings where "
-        + " and ".join(conditions),
-        "record_quality_findings",
-    )
-    for row in rows:
-        if _integer(row.get("invalid_count")) > 0:
-            counts["inaccurate"] += 1
-        elif _integer(row.get("missing_count")) > 0:
-            counts["incomplete"] += 1
-    counts["listedRecordCount"] = counts["incomplete"] + counts["inaccurate"]
+def _listed_state_counts_from_summary(summary):
+    counts = dict(summary.get("stateCounts") or _empty_listed_states())
+    counts["listedRecordCount"] = _integer(summary.get("storedSampleCount"))
     return counts
+
+
+def _sample_list_cap(summary):
+    stored = _integer(summary.get("storedSampleCount"))
+    if stored:
+        return stored
+    return _integer(summary.get("sampleLimit")) or 40
 
 
 def _records_payload(scan_id, page, summary, records, has_more=False):
@@ -409,7 +411,8 @@ def get_record_findings(request, datastore, scan_id):
         summary = _finding_summary(
             find_analytics_results(zcql, scan_row["ROWID"]), modules
         )
-        aggregate_counts = dict(summary.get("stateCounts") or _empty_listed_states())
+        summary["stateCounts"] = _listed_state_counts_from_summary(summary)
+        sample_cap = _sample_list_cap(summary)
 
         schema_version = summary.get("schemaVersion")
         if not summary["measured"] or not schema_version:
@@ -420,16 +423,6 @@ def get_record_findings(request, datastore, scan_id):
         scope_conditions = _finding_scope_conditions(
             scan_row, schema_version, modules, owners
         )
-        listed_counts = _listed_state_counts(zcql, scope_conditions)
-        listed_counts["proper"] = _integer(aggregate_counts.get("proper"))
-        listed_counts["suspicious"] = _integer(aggregate_counts.get("suspicious"))
-        listed_counts["suspected_duplicate"] = _integer(
-            aggregate_counts.get("suspected_duplicate")
-        )
-        listed_counts["confirmed_duplicate"] = _integer(
-            aggregate_counts.get("confirmed_duplicate")
-        )
-        summary["stateCounts"] = listed_counts
         if states and not supported_states:
             return json_response(
                 _records_payload(scan_id, page, summary, []),
@@ -468,7 +461,12 @@ def get_record_findings(request, datastore, scan_id):
             conditions.append("(" + " or ".join(state_conditions) + ")")
 
         offset = 0 if search else (page - 1) * PAGE_SIZE
-        fetch_limit = 301 if search else PAGE_SIZE + 1
+        if offset >= sample_cap:
+            return json_response(
+                _records_payload(scan_id, page, summary, [], False)
+            )
+        remaining = sample_cap - offset
+        fetch_limit = min(301 if search else PAGE_SIZE + 1, remaining)
         finding_query_suffix = (
             " from record_quality_findings where "
             + " and ".join(conditions)

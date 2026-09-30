@@ -1,4 +1,4 @@
-"""Salesforce Bulk API 2.0 Query result download and File Store CSV persist.
+"""Salesforce Bulk API 2.0 Query result download and Stratus CSV persist.
 
 Independent of Zoho Bulk Read. Do not import bulk_read or zoho.client.
 Do not call this during job polling; only after JobComplete / READY_TO_DOWNLOAD.
@@ -9,9 +9,10 @@ Endpoint:
     Accept: text/csv
     locator paging via Sforce-Locator (stop when missing or "null")
 
-Existing bulk_read_jobs File Store columns (no new schema):
+Existing bulk_read_jobs artifact columns:
 
-    source_file_id
+    source_file_id (legacy File Store id; not written for new uploads)
+    source_file_key (Stratus object key for new uploads)
     source_file_name
     source_file_size
     source_file_checksum
@@ -32,6 +33,12 @@ from urllib.parse import urlencode
 import requests
 
 from salesforce.bulk_query import SalesforceBulkError, salesforce_query_jobs_url
+from storage.extract_store import (
+    ExtractStorageError,
+    build_object_key,
+    put_extract,
+)
+from storage.locator import has_extract_locator
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +138,7 @@ def validate_salesforce_result_download(
             "The Salesforce Bulk job has no provider job identifier",
         )
     status = str((bulk_row or {}).get("status") or "").strip()
-    already = status == "DOWNLOADED" and (bulk_row or {}).get("source_file_id")
+    already = status == "DOWNLOADED" and has_extract_locator(bulk_row)
     if already:
         return provider_job_id
     if status == "DOWNLOADING":
@@ -139,13 +146,13 @@ def validate_salesforce_result_download(
             "BULK_DOWNLOAD_RETRY_BLOCKED",
             "Salesforce result download is already in progress or must be inspected",
         )
-    if status == "DOWNLOAD_UNKNOWN" and (bulk_row or {}).get("source_file_id"):
+    if status == "DOWNLOAD_UNKNOWN" and has_extract_locator(bulk_row):
         raise SalesforceBulkError(
             "BULK_DOWNLOAD_RETRY_BLOCKED",
             "Salesforce result download is already in progress or must be inspected",
         )
     if status not in READY_STATUSES and not (
-        status == "DOWNLOAD_UNKNOWN" and not (bulk_row or {}).get("source_file_id")
+        status == "DOWNLOAD_UNKNOWN" and not has_extract_locator(bulk_row)
     ):
         raise SalesforceBulkError(
             "BULK_JOB_STATE_CONFLICT",
@@ -157,7 +164,7 @@ def validate_salesforce_result_download(
 def fetch_salesforce_query_result_pages(
     datastore, connection_row, provider_job_id
 ):
-    """GET locator-paged CSV pages. Does not upload to File Store."""
+    """GET locator-paged CSV pages. Does not upload to Stratus."""
     access_token, instance_url = _stored_access_token(datastore, connection_row)
     pages = []
     locator = None
@@ -181,13 +188,14 @@ def fetch_salesforce_query_result_pages(
 
 
 def persist_salesforce_csv_artifact(
-    datastore, bulk_row, csv_bytes, folder, file_name
+    datastore, bulk_row, csv_bytes, file_name, scan_id, folder=None, app=None
 ):
-    """Upload CSV to File Store and write existing artifact columns.
+    """Upload CSV to Stratus and write artifact columns, including source_file_key.
 
-    Catalyst File Store requires io.BufferedReader (open(..., "rb")), the same
-    object Zoho passes. A bytes-like custom reader raises CatalystFilestoreError.
+    New uploads do not write source_file_id and do not call File Store.
+    `folder` is accepted only for call-site compatibility and is ignored.
     """
+    del folder
     if not isinstance(csv_bytes, (bytes, bytearray)):
         raise SalesforceBulkError("MALFORMED_CSV", "Salesforce CSV is invalid")
     if len(csv_bytes) > MAX_FILESTORE_UPLOAD_BYTES:
@@ -198,24 +206,32 @@ def persist_salesforce_csv_artifact(
     checksum = hashlib.sha256(csv_bytes).hexdigest()
     record_count = _data_row_count(csv_bytes)
     disk_name = os.path.basename(str(file_name or "")) or "export.csv"
+    local_job_id = str((bulk_row or {}).get("bulk_job_id") or "bulk")
+    provider_job_id = str((bulk_row or {}).get("provider_job_id") or "").strip()
     try:
+        source_file_key = build_object_key(
+            scan_id, local_job_id, provider_job_id, "csv"
+        )
         with tempfile.TemporaryDirectory(prefix="sf_bulk_") as temp_dir:
             temp_path = os.path.join(temp_dir, disk_name)
             with open(temp_path, "wb") as temp_file:
                 temp_file.write(csv_bytes)
             with open(temp_path, "rb") as source_file:
-                uploaded = folder.upload_file(file_name, source_file)
-        source_file_id = str((uploaded or {}).get("id") or "").strip()
-        if not source_file_id:
-            raise SalesforceBulkError(
-                "FILESTORE_UPLOAD_FAILED",
-                "File Store did not return a file identifier",
-            )
+                put_extract(source_file_key, source_file, app=app)
     except SalesforceBulkError:
         raise
+    except ExtractStorageError as exc:
+        logger.warning(
+            "Salesforce Stratus upload failed: %s",
+            exc.code or type(exc).__name__,
+        )
+        raise SalesforceBulkError(
+            exc.code or "FILESTORE_UPLOAD_FAILED",
+            "The CSV could not be stored",
+        ) from exc
     except Exception as exc:
         logger.warning(
-            "Salesforce File Store upload failed: %s",
+            "Salesforce Stratus upload failed: %s",
             getattr(exc, "code", None) or type(exc).__name__,
         )
         raise SalesforceBulkError(
@@ -223,7 +239,7 @@ def persist_salesforce_csv_artifact(
         ) from exc
 
     artifact = {
-        "source_file_id": source_file_id,
+        "source_file_key": source_file_key,
         "source_file_name": file_name,
         "source_file_size": len(csv_bytes),
         "source_file_checksum": checksum,
@@ -232,8 +248,18 @@ def persist_salesforce_csv_artifact(
         "status": "DOWNLOADED",
     }
     if bulk_row and bulk_row.get("ROWID"):
-        update = {"ROWID": bulk_row["ROWID"], **artifact}
-        datastore.table("bulk_read_jobs").update_row(update)
+        try:
+            update = {"ROWID": bulk_row["ROWID"], **artifact}
+            datastore.table("bulk_read_jobs").update_row(update)
+        except Exception as exc:
+            logger.warning(
+                "Salesforce extract metadata persist failed: %s",
+                type(exc).__name__,
+            )
+            raise SalesforceBulkError(
+                "FILESTORE_METADATA_PERSIST_FAILED",
+                "The CSV was stored but its metadata could not be saved",
+            ) from exc
     return artifact
 
 
@@ -245,20 +271,22 @@ def download_salesforce_query_results(
     user_id=None,
     folder=None,
     module_row=None,
+    app=None,
 ):
-    """Download JobComplete CSV pages, combine them, and persist to File Store."""
+    """Download JobComplete CSV pages, combine them, and persist to Stratus."""
+    del folder
     provider_job_id = validate_salesforce_result_download(
         scan_row, bulk_row, connection_row, user_id=user_id
     )
-    if (
-        str((bulk_row or {}).get("status") or "") == "DOWNLOADED"
-        and (bulk_row or {}).get("source_file_id")
+    if str((bulk_row or {}).get("status") or "") == "DOWNLOADED" and has_extract_locator(
+        bulk_row
     ):
         return {
             "alreadyDownloaded": True,
             "status": "DOWNLOADED",
             "providerJobId": provider_job_id,
-            "sourceFileId": str(bulk_row.get("source_file_id")),
+            "sourceFileId": str(bulk_row.get("source_file_id") or ""),
+            "sourceFileKey": str(bulk_row.get("source_file_key") or ""),
             "sourceFileName": bulk_row.get("source_file_name"),
             "sourceFileSize": int(bulk_row.get("source_file_size") or 0),
             "sourceFileChecksum": bulk_row.get("source_file_checksum"),
@@ -293,14 +321,18 @@ def download_salesforce_query_results(
         csv_bytes = combine_salesforce_csv_pages(pages)
         local_job_id = str((bulk_row or {}).get("bulk_job_id") or "bulk")
         file_name = f"{local_job_id}_{provider_job_id}.csv"
-        upload_folder = folder if folder is not None else _default_filestore_folder()
         artifact = persist_salesforce_csv_artifact(
-            datastore, bulk_row, csv_bytes, upload_folder, file_name
+            datastore,
+            bulk_row,
+            csv_bytes,
+            file_name,
+            (scan_row or {}).get("scan_id"),
+            app=app,
         )
     except SalesforceBulkError as exc:
         retry_status = (
             "DOWNLOAD_UNKNOWN"
-            if exc.code == "FILESTORE_UPLOAD_FAILED"
+            if exc.code in {"FILESTORE_UPLOAD_FAILED", "FILESTORE_METADATA_PERSIST_FAILED"}
             else "DOWNLOAD_RETRYABLE"
         )
         if exc.code == "BULK_EXPORT_TOO_LARGE":
@@ -332,25 +364,14 @@ def download_salesforce_query_results(
         "alreadyDownloaded": False,
         "status": "DOWNLOADED",
         "providerJobId": provider_job_id,
-        "sourceFileId": artifact["source_file_id"],
+        "sourceFileId": "",
+        "sourceFileKey": artifact["source_file_key"],
         "sourceFileName": artifact["source_file_name"],
         "sourceFileSize": artifact["source_file_size"],
         "sourceFileChecksum": artifact["source_file_checksum"],
         "downloadedRecordCount": artifact["downloaded_record_count"],
         "pageCount": len(pages),
     }
-
-
-def _default_filestore_folder():
-    folder_id = str(os.environ.get("BULK_EXPORT_FOLDER_ID") or "").strip()
-    if not folder_id.isdigit():
-        raise SalesforceBulkError(
-            "BULK_EXPORT_FOLDER_NOT_CONFIGURED",
-            "The Bulk export folder is not configured",
-        )
-    import zcatalyst_sdk
-
-    return zcatalyst_sdk.initialize().filestore().folder(int(folder_id))
 
 
 def _stored_access_token(datastore, connection_row):

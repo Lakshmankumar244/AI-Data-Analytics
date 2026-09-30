@@ -140,6 +140,9 @@ class ProfiledApp:
     def filestore(self):
         return self._app.filestore()
 
+    def stratus(self):
+        return self._app.stratus()
+
     def __getattr__(self, name):
         return getattr(self._app, name)
 

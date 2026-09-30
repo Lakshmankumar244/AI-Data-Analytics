@@ -7,6 +7,8 @@ Salesforce-specific task table and does not write scan or task state.
 from shared.datastore import foreign_row_id, query_one as _query_one
 
 SALESFORCE_TASK_TYPE = "ORCHESTRATE_SALESFORCE_SCAN"
+EXPORT_FIX_XLSX = "EXPORT_FIX_XLSX"
+ALLOWED_SALESFORCE_TASK_TYPES = frozenset({SALESFORCE_TASK_TYPE, EXPORT_FIX_XLSX})
 ZOHO_TASK_TYPE = "ORCHESTRATE_SCAN"
 SALESFORCE_CRM_PROVIDER = "salesforce"
 SALESFORCE_CONNECTIONS_TABLE = "salesforce_connections"
@@ -80,7 +82,7 @@ def resolve_salesforce_task(zcql, task_id):
         raise SalesforceWorkerError("TASK_NOT_FOUND", "Pipeline task was not found")
 
     task_type = str(task_row.get("task_type") or "").strip()
-    if task_type != SALESFORCE_TASK_TYPE:
+    if task_type not in ALLOWED_SALESFORCE_TASK_TYPES:
         raise SalesforceWorkerError(
             "WRONG_TASK_TYPE",
             f"Unsupported task type {task_type or 'missing'}",

@@ -1,6 +1,7 @@
 """Choose the next deterministic scan-pipeline action without changing state."""
 
 from common.core import foreign_row_id
+from storage.locator import has_extract_locator
 
 
 ACTIVE_TASK_STATES = {"QUEUED", "RUNNING"}
@@ -78,7 +79,7 @@ def choose_action(state):
                     **target,
                 }
             if status == "SUBMITTED" or (
-                status == "PROCESSING" and not bulk.get("source_file_id")
+                status == "PROCESSING" and not has_extract_locator(bulk)
             ):
                 return {
                     "name": "CHECK_BULK_STATUS",
@@ -112,8 +113,8 @@ def choose_action(state):
                     "next": "PROCESS_BATCHES",
                     **target,
                 }
-            if status in {"PROCESSING_PLANNED", "PROCESSING"} and bulk.get(
-                "source_file_id"
+            if status in {"PROCESSING_PLANNED", "PROCESSING"} and has_extract_locator(
+                bulk
             ):
                 task = latest_task(state, bulk, "PROCESS_BATCHES")
                 if task and task.get("status") in ACTIVE_TASK_STATES:

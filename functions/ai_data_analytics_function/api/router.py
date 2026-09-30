@@ -3,7 +3,8 @@
 import zcatalyst_sdk
 from flask import Request, make_response
 
-from analytics.routes import get_scan_results, get_scan_status
+from analytics.routes import get_scan_results, get_scan_status, get_fix_records
+from analytics.fix_export import download_fix_export, get_fix_export
 from analytics.records import get_record_findings
 from analytics.fixes import get_fix_plan
 from analytics.trends import get_scan_trend
@@ -12,17 +13,25 @@ from bulk_read.prepare import prepare_bulk_read
 from bulk_read.status import refresh_bulk_read_status
 from bulk_read.submit import submit_bulk_read_job
 from common.core import json_response
-from connections.routes import activate_connection, get_connection, handle_callback, start_consent
+from connections.routes import (
+    activate_connection,
+    enter_marketplace,
+    get_connection,
+    handle_callback,
+    start_consent,
+    start_marketplace_consent,
+)
 from salesforce.oauth import (
     activate_salesforce_connection,
     get_salesforce_connection,
     handle_salesforce_callback,
     start_salesforce_consent,
 )
-from salesforce.describe import get_salesforce_object_describe
+from salesforce.describe_route import get_salesforce_object_describe
 from salesforce.discovery import get_salesforce_metadata
 from salesforce.user_directory import get_salesforce_owner_directory
 from orchestration.routes import advance_scan
+from pipeline.fix_export_enqueue import enqueue_fix_export
 from pipeline.task_routes import enqueue_prepare_batches, enqueue_process_batches
 from scans.routes import create_scan, discover_scan
 from scans.history import list_scans
@@ -34,6 +43,12 @@ def dispatch(request: Request):
 
     if request.path == "/api/zoho/consent":
         return start_consent(request, datastore)
+
+    if request.path == "/api/zoho/marketplace/consent":
+        return start_marketplace_consent(request, datastore)
+
+    if request.path == "/api/marketplace/enter":
+        return enter_marketplace(request)
 
     if request.path == "/api/zoho/callback":
         return handle_callback(request, datastore)
@@ -138,7 +153,8 @@ def dispatch(request: Request):
     if (
         len(path_parts) == 4
         and path_parts[:2] == ["api", "scans"]
-        and path_parts[3] in {"status", "results", "trend", "records", "fix-plan"}
+        and path_parts[3]
+        in {"status", "results", "trend", "records", "fix-plan", "fix-records"}
     ):
         if request.method != "GET":
             response = json_response(
@@ -155,6 +171,8 @@ def dispatch(request: Request):
             return get_record_findings(request, datastore, path_parts[2])
         if path_parts[3] == "fix-plan":
             return get_fix_plan(request, datastore, path_parts[2])
+        if path_parts[3] == "fix-records":
+            return get_fix_records(request, datastore, path_parts[2])
         return get_scan_results(request, datastore, path_parts[2])
 
     if len(path_parts) == 4 and path_parts[:2] == ["api", "scans"] and path_parts[3] == "discover":
@@ -166,6 +184,45 @@ def dispatch(request: Request):
             response.headers["Allow"] = "POST"
             return response
         return discover_scan(request, datastore, path_parts[2])
+
+    if len(path_parts) == 4 and path_parts[:2] == ["api", "scans"] and path_parts[3] == "fix-export":
+        if request.method != "POST":
+            response = json_response(
+                {"error": {"code": "METHOD_NOT_ALLOWED", "message": "Use POST"}},
+                405,
+            )
+            response.headers["Allow"] = "POST"
+            return response
+        return enqueue_fix_export(request, datastore, path_parts[2])
+
+    if (
+        len(path_parts) == 5
+        and path_parts[:2] == ["api", "scans"]
+        and path_parts[3] == "fix-export"
+    ):
+        if request.method != "GET":
+            response = json_response(
+                {"error": {"code": "METHOD_NOT_ALLOWED", "message": "Use GET"}},
+                405,
+            )
+            response.headers["Allow"] = "GET"
+            return response
+        return get_fix_export(request, datastore, path_parts[2], path_parts[4])
+
+    if (
+        len(path_parts) == 6
+        and path_parts[:2] == ["api", "scans"]
+        and path_parts[3] == "fix-export"
+        and path_parts[5] == "file"
+    ):
+        if request.method != "GET":
+            response = json_response(
+                {"error": {"code": "METHOD_NOT_ALLOWED", "message": "Use GET"}},
+                405,
+            )
+            response.headers["Allow"] = "GET"
+            return response
+        return download_fix_export(request, datastore, path_parts[2], path_parts[4])
 
     if len(path_parts) == 4 and path_parts[:2] == ["api", "scans"] and path_parts[3] == "advance":
         if request.method != "POST":

@@ -603,17 +603,15 @@ def get_salesforce_owner_directory(request, datastore):
     import zcatalyst_sdk
 
     from common.core import DiscoveryError, get_current_user_id, json_response
+    from installations.authorization import find_accessible_connected_connection
+    from installations.repository import SALESFORCE_CONNECTIONS_TABLE
     from salesforce.client import get_salesforce_access_token
-    from salesforce.oauth import (
-        find_active_salesforce_connection,
-        find_connected_salesforce_connection,
-    )
 
     user_id = get_current_user_id(request)
     zcql = zcatalyst_sdk.initialize().zcql()
-    row = find_active_salesforce_connection(
-        zcql, user_id
-    ) or find_connected_salesforce_connection(zcql, user_id)
+    row = find_accessible_connected_connection(
+        zcql, SALESFORCE_CONNECTIONS_TABLE, user_id
+    )
     if not row:
         return json_response(
             {

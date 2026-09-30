@@ -182,15 +182,16 @@ export default function SetupScreen() {
   }, [sessionLoading, activeConnection, dispatch]);
 
   useEffect(() => {
-    if (connecting) {
-      window.location.assign(
-        isSalesforce ? api.SALESFORCE_CONSENT_URL : api.ZOHO_CONSENT_URL
-      );
+    if (connecting && isSalesforce) {
+      window.location.assign(api.SALESFORCE_CONSENT_URL);
     }
   }, [connecting, isSalesforce]);
 
   function handleConnect() {
     setConnecting(true);
+    if (!isSalesforce) {
+      window.location.assign(api.zohoConsentUrl());
+    }
     // Full-page redirect - this navigates away, it doesn't resolve in place.
     // Route it through your own backend endpoint (recommended: keeps the
     // OAuth client secret and redirect_uri server-side, and lets you set

@@ -16,6 +16,7 @@ import {
   resolveRoute,
   routeFromState,
 } from "./navigation";
+import { captureMarketplaceEntry } from "./data/marketplaceEntry";
 
 function AppShell() {
   const state = useAppState();
@@ -102,6 +103,7 @@ function AppShell() {
       } catch (err) {
         if (cancelled) return;
         if (err?.status === 401 || err?.status === 403) {
+          captureMarketplaceEntry();
           window.location.assign(`${window.location.origin}/__catalyst/auth/login`);
           return;
         }
@@ -130,6 +132,7 @@ function AppShell() {
       } catch (err) {
         if (gen !== generation) return;
         if (err?.status === 401 || err?.status === 403) {
+          captureMarketplaceEntry();
           window.location.assign(`${window.location.origin}/__catalyst/auth/login`);
           return;
         }

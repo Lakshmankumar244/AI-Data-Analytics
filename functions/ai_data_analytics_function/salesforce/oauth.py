@@ -24,6 +24,11 @@ from common.core import (
     with_fragment_parameter,
 )
 from connections.activation import activate_exclusive_connection
+from installations.authorization import (
+    find_accessible_connected_connection_by_id,
+    list_accessible_connected_connections,
+)
+from installations.repository import connection_row_for_persist
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +74,9 @@ def start_salesforce_consent(request: Request, datastore):
     try:
         login_url = _login_url()
         redirect_uri = _redirect_uri()
-        client_id = os.environ["SALESFORCE_CLIENT_ID"]
+        client_id = str(os.environ.get("SALESFORCE_CLIENT_ID") or "").strip()
+        if not client_id:
+            raise KeyError("SALESFORCE_CLIENT_ID")
     except (KeyError, RuntimeError) as exc:
         logger.exception("Salesforce OAuth is not configured: %s", exc)
         return json_response(
@@ -342,7 +349,7 @@ def upsert_salesforce_connection(datastore, user_id: str, fields: dict):
         ),
         None,
     )
-    row_data = {"user_id": user_id, **fields}
+    row_data = connection_row_for_persist(user_id, fields)
 
     if target:
         row_data["ROWID"] = target["ROWID"]
@@ -401,29 +408,21 @@ def get_salesforce_connection(request: Request, datastore):
     user = get_current_user()
     user_id = str(user["user_id"])
 
-    row = find_connected_salesforce_connection(zcql, user_id)
-    if not row:
-        return make_response(json.dumps(None), 200, {"Content-Type": "application/json"})
-
-    all_rows = zcql.execute_query(
-        f"select * from {SALESFORCE_CONNECTIONS_TABLE} where "
-        f"user_id = '{_escape_zcql(user_id)}' and status = 'connected'"
+    all_rows = list_accessible_connected_connections(
+        zcql, SALESFORCE_CONNECTIONS_TABLE, user_id
     )
+    if not all_rows:
+        return make_response(json.dumps(None), 200, {"Content-Type": "application/json"})
+    row = all_rows[0]
     available_connections = [
         {
-            "connectionId": str(item[SALESFORCE_CONNECTIONS_TABLE]["ROWID"]),
-            "organizationId": str(
-                item[SALESFORCE_CONNECTIONS_TABLE].get("salesforce_org_id") or ""
-            ),
-            "organizationName": str(
-                item[SALESFORCE_CONNECTIONS_TABLE].get("organization_name") or ""
-            ),
-            "name": str(item[SALESFORCE_CONNECTIONS_TABLE].get("connected_name") or ""),
-            "email": str(item[SALESFORCE_CONNECTIONS_TABLE].get("connected_email") or ""),
-            "instanceUrl": str(
-                item[SALESFORCE_CONNECTIONS_TABLE].get("instance_url") or ""
-            ),
-            "isActive": _is_true(item[SALESFORCE_CONNECTIONS_TABLE].get("is_active")),
+            "connectionId": str(item["ROWID"]),
+            "organizationId": str(item.get("salesforce_org_id") or ""),
+            "organizationName": str(item.get("organization_name") or ""),
+            "name": str(item.get("connected_name") or ""),
+            "email": str(item.get("connected_email") or ""),
+            "instanceUrl": str(item.get("instance_url") or ""),
+            "isActive": _is_true(item.get("is_active")),
         }
         for item in all_rows
     ]
@@ -467,16 +466,11 @@ def activate_salesforce_connection(request: Request, datastore, connection_row_i
 
     user_id = get_current_user_id(request)
     zcql = zcatalyst_sdk.initialize().zcql()
-    rows = zcql.execute_query(
-        f"select * from {SALESFORCE_CONNECTIONS_TABLE} where "
-        f"ROWID = {connection_row_id} "
-        f"and user_id = '{_escape_zcql(user_id)}' "
-        "and status = 'connected' limit 1"
+    selected = find_accessible_connected_connection_by_id(
+        zcql, SALESFORCE_CONNECTIONS_TABLE, connection_row_id, user_id
     )
-    if not rows:
+    if not selected:
         return make_response("Not found", 404)
-
-    selected = rows[0][SALESFORCE_CONNECTIONS_TABLE]
     try:
         activate_exclusive_connection(
             datastore,

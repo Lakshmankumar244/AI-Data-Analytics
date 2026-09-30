@@ -424,6 +424,7 @@ export default function FilterBar() {
   }
 
   function handleExport() {
+    if (tab === "fix") return;
     const root = document.querySelector("[data-export-root]") || document.querySelector(".report-shell-panel");
     exportVisibleTables(root, `crm-data-health-${tab || "report"}`);
   }
@@ -485,9 +486,11 @@ export default function FilterBar() {
             <Button type="button" variant="ghost" size="sm" onClick={handlePrint}>
               Print
             </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={handleExport}>
-              Export <ChevronIcon />
-            </Button>
+            {tab === "fix" ? null : (
+              <Button type="button" variant="ghost" size="sm" onClick={handleExport}>
+                Export <ChevronIcon />
+              </Button>
+            )}
           </div>
         </div>
       </ContentContainer>

@@ -9,6 +9,7 @@
 					"ZOHO_ACCOUNTS_URL":"https://accounts.zoho.in", 
 					"ZOHO_API_DOMAIN":"https://www.zohoapis.in", 
 					"BULK_EXPORT_FOLDER_ID":"48465000000078186",
+					"STRATUS_BUCKET_NAME":"crm-extracts",
 					"ANALYTICS_WORKER_JOB_POOL_NAME":"aiDataAnalyticsWorkerPool",
 					"ANALYTICS_WORKER_FUNCTION_NAME":"ai_data_analytics_worker"
 		}

@@ -24,6 +24,8 @@ SHARED_FILES = (
     "datastore.py",
     "profiler.py",
     "prepare_batches.py",
+    "fix_sidecar.py",
+    "fix_export.py",
 )
 SHARED_SALESFORCE_FILES = (
     "client.py",
@@ -163,6 +165,14 @@ class SharedWorkerHelperTests(unittest.TestCase):
         self.assertEqual(len(table.insert_rows.call_args_list[0].args[0]), 100)
         self.assertEqual(len(table.insert_rows.call_args_list[2].args[0]), 50)
 
+    def test_delete_rows_in_chunks(self):
+        table = Mock()
+        row_ids = [str(i) for i in range(1, 251)]
+        self.datastore.delete_rows_in_chunks(table, row_ids, chunk_size=200)
+        self.assertEqual(table.delete_rows.call_count, 2)
+        self.assertEqual(table.delete_rows.call_args_list[0].args[0], list(range(1, 201)))
+        self.assertEqual(table.delete_rows.call_args_list[1].args[0], list(range(201, 251)))
+
 
 class SharedWorkerPackagingTests(unittest.TestCase):
     def test_catalyst_targets_do_not_deploy_shared_source(self):
@@ -178,7 +188,20 @@ class SharedWorkerPackagingTests(unittest.TestCase):
         self.assertNotIn("_shared", config["functions"]["targets"])
         self.assertEqual(
             config["functions"]["scripts"]["predeploy"],
-            "python _shared/sync_into_workers.py",
+            "npm run sync-shared",
+        )
+        self.assertEqual(
+            config["functions"]["scripts"]["preserve"],
+            "npm run sync-shared",
+        )
+        self.assertTrue((FUNCTIONS_ROOT / "package.json").is_file())
+        package = json.loads((FUNCTIONS_ROOT / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(package["scripts"]["sync-shared"], "node _shared/sync_into_workers.js")
+        self.assertTrue(
+            (FUNCTIONS_ROOT / "_shared" / "sync_into_workers.js").is_file()
+        )
+        self.assertTrue(
+            (FUNCTIONS_ROOT / "_shared" / "sync_into_workers.py").is_file()
         )
         self.assertFalse((SHARED_SOURCE.parent / "catalyst-config.json").exists())
 
@@ -195,6 +218,8 @@ class SharedWorkerPackagingTests(unittest.TestCase):
             self.assertTrue((worker / "shared" / "prepare_batches.py").is_file())
             self.assertTrue((worker / "shared" / "profiler.py").is_file())
             self.assertTrue((worker / "shared" / "datastore.py").is_file())
+            self.assertTrue((worker / "shared" / "fix_sidecar.py").is_file())
+            self.assertTrue((worker / "shared" / "fix_export.py").is_file())
             self.assertTrue((worker / "main.py").is_file())
             self.assertTrue((worker / "catalyst-config.json").is_file())
 
@@ -318,6 +343,8 @@ for name in (
     "connections.access",
     "orchestration.choose",
     "common.profiler",
+    "storage.locator",
+    "storage.extract_store",
 ):
     module = importlib.import_module(name)
     assert module is sys.modules[name]
@@ -370,6 +397,55 @@ class SharedZohoPackagingTests(unittest.TestCase):
 
     def test_zoho_worker_imports_shared_zoho_modules(self):
         _assert_zoho_modules_import(ZOHO_WORKER)
+
+
+class SharedStoragePackagingTests(unittest.TestCase):
+    def test_packaged_storage_modules_match_shared_source(self):
+        names = ("__init__.py", "extract_store.py", "locator.py")
+        source_dir = SHARED_ZOHO_ROOT / "storage"
+        for dest in (HTTP_FUNCTION, ZOHO_WORKER, SF_WORKER):
+            for name in names:
+                source = (source_dir / name).read_bytes()
+                copy = (dest / "storage" / name).read_bytes()
+                self.assertEqual(source, copy, f"{dest.name}/storage/{name}")
+
+    def test_http_and_workers_import_storage_package(self):
+        script = r"""
+import importlib
+import sys
+import types
+from pathlib import Path
+
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root))
+if "flask" not in sys.modules:
+    flask = types.ModuleType("flask")
+    flask.Request = type("Request", (), {})
+    flask.make_response = lambda *args, **kwargs: None
+    flask.redirect = lambda *args, **kwargs: None
+    sys.modules["flask"] = flask
+if "zcatalyst_sdk" not in sys.modules:
+    stub = types.ModuleType("zcatalyst_sdk")
+    stub.initialize = lambda: None
+    sys.modules["zcatalyst_sdk"] = stub
+for name in ("storage.locator", "storage.extract_store"):
+    module = importlib.import_module(name)
+    assert module is sys.modules[name]
+print("ok")
+"""
+        for dest in (HTTP_FUNCTION, ZOHO_WORKER, SF_WORKER):
+            result = subprocess.run(
+                [sys.executable, "-c", script, str(dest)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                raise AssertionError(
+                    f"storage import failed for {dest.name}:\n"
+                    f"{result.stdout}\n{result.stderr}"
+                )
+            self.assertIn("ok", result.stdout)
 
 
 if __name__ == "__main__":

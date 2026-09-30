@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAppDispatch, useAppState } from "../../state/AppContext";
-import { activateConnection, advanceScan, deleteScan, getScanHistory, getScorecard, SALESFORCE_CONSENT_URL, ZOHO_CONSENT_URL } from "../../data/client";
+import { activateConnection, advanceScan, deleteScan, getScanHistory, getScorecard, SALESFORCE_CONSENT_URL, zohoConsentUrl } from "../../data/client";
 import { connectionSummary, providerLabel } from "../../data/activeConnection";
 import { Trash2 } from "lucide-react";
 import { formatNumber, formatReportPeriod, formatScanTimestamp } from "../../utils/format";
@@ -348,7 +348,7 @@ export default function HomeScreen() {
               type="button"
               variant="outline"
               size="lg"
-              onClick={() => window.location.assign(ZOHO_CONSENT_URL)}
+              onClick={() => window.location.assign(zohoConsentUrl())}
             >
               Connect another Zoho account
             </Button>

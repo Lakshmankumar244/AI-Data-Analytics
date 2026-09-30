@@ -7,6 +7,7 @@ from shared.datastore import (
     query_one as _query_one,
 )
 from shared.profiler import ProfiledApp, ScanProfiler
+from storage.locator import has_extract_locator
 
 
 BATCH_SIZE = 5000
@@ -55,7 +56,7 @@ def prepare_batches(app, task_row):
     if expected_count < 0:
         raise ValueError("Provider record count is invalid")
     source_checksum = bulk_row.get("source_file_checksum")
-    if not bulk_row.get("source_file_id") or not source_checksum:
+    if not has_extract_locator(bulk_row) or not source_checksum:
         raise ValueError("Downloaded source file metadata is incomplete")
 
     batch_table = datastore.table("processing_batches")

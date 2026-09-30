@@ -13,17 +13,16 @@ import json
 import logging
 import os
 import re
-import tempfile
 import zipfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
-import zcatalyst_sdk
-
 from analytics.repository import find_bulk_jobs, find_module_runs
 from common.core import canonical_hash
 from salesforce.owner_resolution import owner_field_name, resolve_owner_identity
+from storage.extract_store import download_extract_to_tempfile
+from storage.locator import has_extract_locator
 
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -89,8 +88,10 @@ def _is_valid(value, validator_kind):
     if validator_kind == "email":
         return EMAIL_PATTERN.fullmatch(value.strip()) is not None
     if validator_kind == "phone":
-        digit_count = len(re.sub(r"\D", "", value))
-        return 7 <= digit_count <= 15
+        digits = re.sub(r"\D", "", value)
+        if not digits or set(digits) == {"0"}:
+            return False
+        return 7 <= len(digits) <= 15
     if validator_kind == "url":
         parsed = urlsplit(value if "://" in value else f"//{value}")
         return bool(parsed.netloc and "." in parsed.netloc)
@@ -320,41 +321,12 @@ def _evaluated_field(fields, *names):
 
 
 def _download_source_zip(bulk_row):
-    folder_id = os.environ.get("BULK_EXPORT_FOLDER_ID", "")
-    if not folder_id.isdigit():
-        raise ValueError("BULK_EXPORT_FOLDER_ID is not configured")
-    source_file_id = str(bulk_row.get("source_file_id") or "")
-    if not source_file_id.isdigit():
-        raise ValueError("Bulk Read source file identifier is invalid")
-
-    temp_file = tempfile.NamedTemporaryFile(
-        prefix="ada_clean_", suffix=".zip", delete=False
+    return download_extract_to_tempfile(
+        bulk_row,
+        prefix="ada_clean_",
+        suffix=".zip",
+        require_checksum=False,
     )
-    temp_path = temp_file.name
-    source_hash = hashlib.sha256()
-    try:
-        response = (
-            zcatalyst_sdk.initialize()
-            .filestore()
-            .folder(int(folder_id))
-            .get_file_stream(int(source_file_id))
-        )
-        with temp_file:
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    source_hash.update(chunk)
-                    temp_file.write(chunk)
-        checksum = bulk_row.get("source_file_checksum")
-        if checksum and source_hash.hexdigest() != checksum:
-            raise ValueError("Downloaded File Store checksum does not match")
-        return temp_path
-    except Exception:
-        try:
-            temp_file.close()
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        raise
 
 
 def _utc_timestamp(value):
@@ -474,7 +446,7 @@ def list_clean_records(zcql, scan_row, modules, owners, owner_directory):
         if selected and module_api_name not in selected:
             continue
         for bulk_row in find_bulk_jobs(zcql, module_row["ROWID"]):
-            if str(bulk_row.get("source_file_id") or "").isdigit():
+            if has_extract_locator(bulk_row):
                 records.extend(
                     _clean_records_from_bulk(
                         bulk_row,
@@ -593,7 +565,7 @@ def list_owner_analytics(zcql, scan_row, module_api_name, owner_directory):
         if str(module_row.get("module_api_name") or "") != selected:
             continue
         for bulk_row in find_bulk_jobs(zcql, module_row["ROWID"]):
-            if str(bulk_row.get("source_file_id") or "").isdigit():
+            if has_extract_locator(bulk_row):
                 collected.extend(
                     _owner_analytics_from_bulk(
                         bulk_row, module_row, scan_row, owner_directory

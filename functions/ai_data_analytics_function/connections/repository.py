@@ -79,17 +79,18 @@ def find_persisted_scan_connection(zcql, scan_row):
 
 
 def find_scan_connection(zcql, user_id, scan_row):
-    """Resolve a scan's original Zoho connection and verify authenticated ownership."""
+    """Resolve a scan's Zoho connection through dual-read access.
+
+    Salesforce scans keep returning None here; SF HTTP actions use other paths.
+    """
+    from installations.authorization import find_accessible_connected_connection_by_id
+    from installations.repository import ZOHO_CONNECTIONS_TABLE
+
     if scan_crm_provider(scan_row) == "salesforce":
         return None
     connection_row_id = str(foreign_row_id(scan_row.get("connection_row_id")) or "")
     if not connection_row_id.isdigit():
         return None
-    rows = _rows(
-        zcql,
-        "select * from zoho_connections where "
-        f"ROWID = {connection_row_id} "
-        f"and user_id = '{_escape(user_id)}' "
-        "and status = 'connected' limit 1",
+    return find_accessible_connected_connection_by_id(
+        zcql, ZOHO_CONNECTIONS_TABLE, connection_row_id, user_id
     )
-    return rows[0] if rows else None

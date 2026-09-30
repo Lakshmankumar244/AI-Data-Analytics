@@ -372,5 +372,189 @@ class RecordFindingsRouteTests(unittest.TestCase):
         )
 
 
+class RecordFindingsSampleBoundTests(unittest.TestCase):
+    def _request(self, page="1"):
+        return types.SimpleNamespace(
+            args=types.SimpleNamespace(
+                get=lambda key, default=None: page if key == "page" else default,
+                getlist=lambda key: [],
+            )
+        )
+
+    def _analytics_row(self):
+        return {
+            "status": "COMPUTED",
+            "metric_group": "record_findings",
+            "schema_version": "record-findings-v5",
+            "module_api_name": "Leads",
+            "aggregate_json": json.dumps(
+                {
+                    "measured": True,
+                    "affectedRecordCount": 198,
+                    "issueCount": 612,
+                    "storedSampleCount": 40,
+                    "sampleLimit": 40,
+                    "stateCounts": {
+                        "proper": 49,
+                        "incomplete": 80,
+                        "inaccurate": 118,
+                        "suspicious": 0,
+                        "suspected_duplicate": 0,
+                        "confirmed_duplicate": 0,
+                    },
+                }
+            ),
+        }
+
+    def _finding_row(self, index):
+        return {
+            "ROWID": str(1000 + index),
+            "finding_id": f"finding_{index}",
+            "record_key": f"record_{index}",
+            "crm_record_id": f"zcrm_{index}",
+            "owner_key": "",
+            "module_api_name": "Leads",
+            "issue_count": 1,
+            "missing_count": 0,
+            "invalid_count": 1,
+            "stale_count": 0,
+            "highest_severity": "HIGH",
+            "computed_at": "2026-09-21 12:00:00",
+        }
+
+    def test_counts_come_from_analytics_results_not_finding_scan(self):
+        findings = [self._finding_row(index) for index in range(100)]
+        captured = {}
+
+        def fake_json_response(payload, status=200):
+            captured["payload"] = payload
+            captured["status"] = status
+            return types.SimpleNamespace(status_code=status, payload=payload)
+
+        class LimitAwareZcql(TableZcql):
+            def execute_query(self, query):
+                import re
+
+                self.queries.append(query)
+                rows = []
+                for table_name, table_rows in self.tables.items():
+                    if f"from {table_name}" in query:
+                        rows = list(table_rows)
+                        break
+                match = re.search(r"limit (\d+),(\d+)", query)
+                if match:
+                    offset = int(match.group(1))
+                    size = int(match.group(2))
+                    rows = rows[offset : offset + size]
+                table_name = "record_quality_findings"
+                if "from record_quality_issues" in query:
+                    table_name = "record_quality_issues"
+                elif "from zoho_connection_users" in query:
+                    table_name = "zoho_connection_users"
+                return [{table_name: row} for row in rows]
+
+        zcql = LimitAwareZcql(
+            {
+                "record_quality_findings": findings,
+                "record_quality_issues": [],
+                "zoho_connection_users": [],
+            }
+        )
+        with patch(
+            "analytics.records.json_response", side_effect=fake_json_response
+        ), patch(
+            "analytics.records.get_current_user_id", return_value="user-1"
+        ), patch(
+            "analytics.records.find_owned_scan",
+            return_value=_scan_row("zoho"),
+        ), patch(
+            "analytics.records.find_analytics_results",
+            return_value=[self._analytics_row()],
+        ), patch("analytics.records.zcatalyst_sdk.initialize") as initialize:
+            initialize.return_value.zcql.return_value = zcql
+            response = get_record_findings(
+                self._request("1"), object(), _scan_row("zoho")["scan_id"]
+            )
+        self.assertEqual(response.status_code, 200)
+        summary = captured["payload"]["summary"]
+        self.assertEqual(summary["stateCounts"]["incomplete"], 80)
+        self.assertEqual(summary["stateCounts"]["inaccurate"], 118)
+        self.assertEqual(summary["stateCounts"]["proper"], 49)
+        self.assertEqual(summary["stateCounts"]["listedRecordCount"], 40)
+        self.assertEqual(len(captured["payload"]["records"]), 20)
+        finding_queries = [
+            query
+            for query in zcql.queries
+            if "from record_quality_findings" in query
+        ]
+        self.assertTrue(finding_queries)
+        self.assertFalse(
+            any(
+                "select missing_count,invalid_count from record_quality_findings"
+                in query
+                for query in zcql.queries
+            )
+        )
+        self.assertTrue(all("limit " in query for query in finding_queries))
+        self.assertTrue(all("limit 0,21" in query for query in finding_queries))
+
+    def test_records_listing_does_not_page_past_stored_sample(self):
+        findings = [self._finding_row(index) for index in range(100)]
+        captured = {}
+
+        def fake_json_response(payload, status=200):
+            captured["payload"] = payload
+            captured["status"] = status
+            return types.SimpleNamespace(status_code=status, payload=payload)
+
+        class LimitAwareZcql(TableZcql):
+            def execute_query(self, query):
+                import re
+
+                self.queries.append(query)
+                rows = []
+                table_name = "record_quality_findings"
+                for name, table_rows in self.tables.items():
+                    if f"from {name}" in query:
+                        rows = list(table_rows)
+                        table_name = name
+                        break
+                match = re.search(r"limit (\d+),(\d+)", query)
+                if match:
+                    offset = int(match.group(1))
+                    size = int(match.group(2))
+                    rows = rows[offset : offset + size]
+                return [{table_name: row} for row in rows]
+
+        zcql = LimitAwareZcql(
+            {
+                "record_quality_findings": findings,
+                "record_quality_issues": [],
+                "zoho_connection_users": [],
+            }
+        )
+        with patch(
+            "analytics.records.json_response", side_effect=fake_json_response
+        ), patch(
+            "analytics.records.get_current_user_id", return_value="user-1"
+        ), patch(
+            "analytics.records.find_owned_scan",
+            return_value=_scan_row("zoho"),
+        ), patch(
+            "analytics.records.find_analytics_results",
+            return_value=[self._analytics_row()],
+        ), patch("analytics.records.zcatalyst_sdk.initialize") as initialize:
+            initialize.return_value.zcql.return_value = zcql
+            response = get_record_findings(
+                self._request("3"), object(), _scan_row("zoho")["scan_id"]
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(captured["payload"]["records"], [])
+        self.assertFalse(captured["payload"]["hasMore"])
+        self.assertFalse(
+            any("from record_quality_findings" in query for query in zcql.queries)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

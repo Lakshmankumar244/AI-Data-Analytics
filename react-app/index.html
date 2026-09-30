@@ -35,6 +35,21 @@
         } catch (e) {}
       })();
     </script>
+    <script>
+      // Persist Marketplace entry before Catalyst login_redirect strips the
+      // query. Cookie Path=/ survives /app/index.html; sessionStorage does not
+      // if this document never loaded with ?source=marketplace.
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search || "");
+          if (params.get("source") !== "marketplace") return;
+          sessionStorage.setItem("dhs-marketplace-entry", "1");
+          var secure = window.location.protocol === "https:" ? "; Secure" : "";
+          document.cookie =
+            "dhs-marketplace-entry=1; path=/; SameSite=Lax" + secure;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

@@ -1,4 +1,5 @@
 import * as api from "./data/client";
+import { searchForNavigation } from "./data/marketplaceEntry";
 
 const BASE = String(import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
@@ -57,8 +58,14 @@ function pathsEqual(left, right) {
 export function navigateTo(route, { replace = false } = {}) {
   if (!route) return;
   const nextPath = pathFor(route);
-  if (window.location.pathname === nextPath) return;
-  const url = `${nextPath}${window.location.search}${window.location.hash}`;
+  const nextSearch = searchForNavigation();
+  if (
+    window.location.pathname === nextPath &&
+    window.location.search === nextSearch
+  ) {
+    return;
+  }
+  const url = `${nextPath}${nextSearch}${window.location.hash}`;
   const method =
     replace || pathsEqual(window.location.pathname, nextPath)
       ? "replaceState"

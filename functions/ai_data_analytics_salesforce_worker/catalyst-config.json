@@ -5,7 +5,10 @@
 		"type": "job",
 		"env_variables": {
 					"SALESFORCE_LOGIN_URL":"https://login.salesforce.com",
+					"SALESFORCE_CLIENT_ID":"",
+					"SALESFORCE_CLIENT_SECRET":"",
 					"BULK_EXPORT_FOLDER_ID":"48465000000078186",
+					"STRATUS_BUCKET_NAME":"crm-extracts",
 					"ANALYTICS_WORKER_JOB_POOL_NAME":"sfDataAnalyticsWorkerPool",
 					"ANALYTICS_WORKER_FUNCTION_NAME":"ai_data_analytics_salesforce_worker"
 		}

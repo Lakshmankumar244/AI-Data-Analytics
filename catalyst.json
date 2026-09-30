@@ -8,8 +8,8 @@
     "ignore": [],
     "source": "functions",
     "scripts": {
-      "preserve": "python _shared/sync_into_workers.py",
-      "predeploy": "python _shared/sync_into_workers.py"
+      "preserve": "npm run sync-shared",
+      "predeploy": "npm run sync-shared"
     }
   },
   "client": {

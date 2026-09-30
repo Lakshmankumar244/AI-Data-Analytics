@@ -6,25 +6,23 @@ import zcatalyst_sdk
 from flask import Request
 
 from common.core import DiscoveryError, get_current_user_id, json_response
+from installations.authorization import find_accessible_connected_connection
+from installations.repository import SALESFORCE_CONNECTIONS_TABLE
 from salesforce.client import (
     fetch_accessible_sobjects,
     fetch_salesforce_organization,
     get_salesforce_access_token,
     persist_salesforce_organization_name,
 )
-from salesforce.oauth import (
-    find_active_salesforce_connection,
-    find_connected_salesforce_connection,
-)
 
 logger = logging.getLogger(__name__)
 
 
 def _select_salesforce_connection(zcql, user_id: str):
-    """Prefer the exclusive-active Salesforce row; otherwise the connected row."""
-    return find_active_salesforce_connection(
-        zcql, user_id
-    ) or find_connected_salesforce_connection(zcql, user_id)
+    """Prefer the exclusive-active Salesforce row the caller can access."""
+    return find_accessible_connected_connection(
+        zcql, SALESFORCE_CONNECTIONS_TABLE, user_id
+    )
 
 
 def get_salesforce_metadata(request: Request, datastore):

@@ -6,6 +6,12 @@ import zcatalyst_sdk
 
 from analytics.repository import find_owned_scan
 from common.core import AuthenticationRequired, get_current_user_id, json_response
+from storage.extract_store import (
+    ExtractStorageError,
+    bucket_name,
+    delete_scan_extracts,
+)
+from storage.locator import stratus_object_key
 
 
 LOGGER = logging.getLogger(__name__)
@@ -46,6 +52,41 @@ def _confirmed_scan_id(request):
     if not isinstance(payload, dict):
         return ""
     return str(payload.get("confirmScanId") or "").strip()
+
+
+def _has_stratus_extracts(bulk_rows):
+    return any(stratus_object_key(row.get("source_file_key")) for row in bulk_rows)
+
+
+def _delete_stratus_prefix(scan_id, app, bulk_rows):
+    """Delete exports/{scan_id}/ when Stratus can be used.
+
+    Legacy File Store-only scans skip Stratus when the bucket is not
+    configured or prefix delete fails without recorded Stratus locators.
+    Does not delete File Store objects.
+    """
+    has_keys = _has_stratus_extracts(bulk_rows)
+    if not bucket_name():
+        if has_keys:
+            raise ExtractStorageError(
+                "STRATUS_BUCKET_NOT_CONFIGURED",
+                "The Stratus extract bucket is not configured",
+            )
+        return None
+    try:
+        return delete_scan_extracts(scan_id, app=app)
+    except ExtractStorageError as exc:
+        if not has_keys and exc.code in {
+            "STRATUS_BUCKET_NOT_CONFIGURED",
+            "EXTRACT_DELETE_FAILED",
+        }:
+            LOGGER.warning(
+                "Skipping Stratus prefix delete for File Store-only scan_id=%s: %s",
+                scan_id,
+                exc,
+            )
+            return None
+        raise
 
 
 def delete_scan(request, datastore, scan_id):
@@ -158,6 +199,7 @@ def delete_scan(request, datastore, scan_id):
                 if str(row.get("source_file_id") or "").isdigit()
             }
         )
+        stratus_prefix = _delete_stratus_prefix(scan_id, app, bulk_rows)
 
         deleted = {}
         for table_name in (
@@ -180,6 +222,7 @@ def delete_scan(request, datastore, scan_id):
                 "scanId": scan_id,
                 "deleted": deleted,
                 "sourceFileIds": source_file_ids,
+                "stratusPrefix": stratus_prefix,
                 "message": "Scan datastore records were deleted; its Zoho connection was retained",
             }
         )

@@ -19,9 +19,15 @@ from shared.datastore import (
     catalyst_datetime_now as _catalyst_datetime_now,
     foreign_row_id as _foreign_row_id,
     insert_rows_in_chunks as _insert_rows_in_chunks,
+    delete_rows_in_chunks as _delete_rows_in_chunks,
     numeric_row_id as _numeric_row_id,
     query_all_rows as _query_all_rows,
     query_one as _query_one,
+)
+from shared.fix_sidecar import (
+    attach_sidecar_line as _attach_sidecar_line,
+    compact_issue_type_keys as _compact_issue_type_keys,
+    write_fix_sidecar as _write_fix_sidecar,
 )
 from worker.profiler import ProfiledApp, ScanProfiler
 
@@ -31,7 +37,7 @@ QUALITY_RULE_VERSION = "quality-rules-v1"
 DOMAIN_SCHEMA_VERSION = "quality-domains-v2"
 DOMAIN_RULE_VERSION = "phase2-domain-rules-v1"
 OWNER_SCHEMA_VERSION = "owner-quality-v2"
-RECORD_FINDING_SCHEMA_VERSION = "record-findings-v4"
+RECORD_FINDING_SCHEMA_VERSION = "record-findings-v5"
 RECORD_FINDING_RULE_VERSION = "record-rules-v3"
 MAX_STORED_FINDINGS_PER_MODULE = 40
 MAX_STORED_ISSUES_PER_FINDING = 4
@@ -107,8 +113,10 @@ def _is_valid(value, validator_kind):
     if validator_kind == "email":
         return EMAIL_PATTERN.fullmatch(value.strip()) is not None
     if validator_kind == "phone":
-        digit_count = len(re.sub(r"\D", "", value))
-        return 7 <= digit_count <= 15
+        digits = re.sub(r"\D", "", value)
+        if not digits or set(digits) == {"0"}:
+            return False
+        return 7 <= len(digits) <= 15
     if validator_kind == "url":
         parsed = urlsplit(value if "://" in value else f"//{value}")
         return bool(parsed.netloc and "." in parsed.netloc)
@@ -673,32 +681,64 @@ def _record_finding_candidate(
     }
 
 
-def _persist_record_findings(app, scan_row, module_row, batch_row, source_checksum, findings):
-    if not findings:
-        return {"affectedRecordCount": 0, "issueCount": 0}
+def _replace_batch_record_findings(zcql, datastore, existing_finding_rows):
+    """Drop prior findings/issues for this processing batch before a rewrite."""
+    if not existing_finding_rows:
+        return
+    finding_ids = [
+        int(_numeric_row_id(row.get("ROWID"), "Record finding identifier"))
+        for row in existing_finding_rows
+    ]
+    issue_ids = []
+    for start in range(0, len(finding_ids), 25):
+        chunk = finding_ids[start : start + 25]
+        issue_rows = _query_all_rows(
+            zcql,
+            "select ROWID from record_quality_issues where "
+            + " or ".join(f"finding_row_id = {row_id}" for row_id in chunk),
+            "record_quality_issues",
+        )
+        issue_ids.extend(
+            int(_numeric_row_id(row.get("ROWID"), "Record issue identifier"))
+            for row in issue_rows
+        )
+    if issue_ids:
+        _delete_rows_in_chunks(datastore.table("record_quality_issues"), issue_ids)
+    _delete_rows_in_chunks(datastore.table("record_quality_findings"), finding_ids)
 
+
+def _persist_record_findings(
+    app,
+    scan_row,
+    module_row,
+    batch_row,
+    source_checksum,
+    findings,
+    issue_findings=None,
+):
     zcql = app.zcql()
     datastore = app.datastore()
     batch_row_id = _numeric_row_id(batch_row.get("ROWID"), "Processing batch link")
     existing_rows = _query_all_rows(
         zcql,
-        "select * from record_quality_findings where "
+        "select ROWID from record_quality_findings where "
         f"processing_batch_row_id = {batch_row_id}",
         "record_quality_findings",
     )
-    existing_by_key = {
-        str(row.get("finding_key") or ""): row
-        for row in existing_rows
-    }
+    _replace_batch_record_findings(zcql, datastore, existing_rows)
+    if not findings:
+        return {"affectedRecordCount": 0, "issueCount": 0}
+
     finding_table = datastore.table("record_quality_findings")
     issue_table = datastore.table("record_quality_issues")
     computed_at = _catalyst_datetime_now()
-    pending_issue_rows = []
+    sampled_issue_keys = {
+        finding["findingKey"]
+        for finding in (issue_findings if issue_findings is not None else findings)
+    }
 
     new_finding_rows = []
     for finding in findings:
-        if finding["findingKey"] in existing_by_key:
-            continue
         row_data = {
             "finding_id": f"finding_{finding['findingKey'][:32]}",
             "finding_key": finding["findingKey"],
@@ -718,44 +758,31 @@ def _persist_record_findings(app, scan_row, module_row, batch_row, source_checks
             "rule_version": RECORD_FINDING_RULE_VERSION,
             "source_checksum": source_checksum,
             "computed_at": computed_at,
+            "jsonl_line": int(finding.get("jsonlLine") or 0),
+            "display_name": finding.get("displayName") or "",
+            "issue_type_keys": finding.get("issueTypeKeys")
+            or _compact_issue_type_keys(finding.get("issues")),
         }
         if finding["ownerKey"]:
             row_data["owner_key"] = finding["ownerKey"]
         new_finding_rows.append(row_data)
 
     _insert_rows_in_chunks(finding_table, new_finding_rows)
-    if new_finding_rows:
-        stored_rows = _query_all_rows(
-            zcql,
-            "select * from record_quality_findings where "
-            f"processing_batch_row_id = {batch_row_id}",
-            "record_quality_findings",
-        )
-        existing_by_key = {
-            str(row.get("finding_key") or ""): row for row in stored_rows
-        }
+    stored_rows = _query_all_rows(
+        zcql,
+        "select * from record_quality_findings where "
+        f"processing_batch_row_id = {batch_row_id}",
+        "record_quality_findings",
+    )
+    stored_by_key = {
+        str(row.get("finding_key") or ""): row for row in stored_rows
+    }
 
-    existing_issue_keys = set()
-    if existing_rows:
-        record_keys = [finding["recordKey"] for finding in findings]
-        for start in range(0, len(record_keys), 25):
-            key_values = ",".join(
-                f"'{record_key}'" for record_key in record_keys[start : start + 25]
-            )
-            issue_rows = _query_all_rows(
-                zcql,
-                "select issue_key from record_quality_issues where "
-                f"record_key in ({key_values}) and "
-                f"schema_version = '{RECORD_FINDING_SCHEMA_VERSION}'",
-                "record_quality_issues",
-            )
-            existing_issue_keys.update(
-                str(row.get("issue_key") or "") for row in issue_rows
-            )
-
+    pending_issue_rows = []
     for finding in findings:
-        finding_key = finding["findingKey"]
-        stored_finding = existing_by_key.get(finding_key)
+        if finding["findingKey"] not in sampled_issue_keys:
+            continue
+        stored_finding = stored_by_key.get(finding["findingKey"])
         if stored_finding is None:
             raise ValueError("Stored record finding could not be resolved")
         finding_row_id = _numeric_row_id(
@@ -764,14 +791,12 @@ def _persist_record_findings(app, scan_row, module_row, batch_row, source_checks
         for issue in finding["issues"][:MAX_STORED_ISSUES_PER_FINDING]:
             issue_key = _canonical_hash(
                 {
-                    "finding_key": finding_key,
+                    "finding_key": finding["findingKey"],
                     "field": issue["fieldApiName"],
                     "issue_type": issue["issueType"],
                     "schema_version": RECORD_FINDING_SCHEMA_VERSION,
                 }
             )
-            if issue_key in existing_issue_keys:
-                continue
             metadata = {
                 "messageCode": issue["messageCode"],
                 "validator": issue["validator"],
@@ -1318,37 +1343,15 @@ def _persist_owner_results(app, scan_row, module_row, bulk_row, owners):
 
 
 def _download_source_zip(app, bulk_row):
-    folder_id = os.environ.get("BULK_EXPORT_FOLDER_ID", "")
-    if not folder_id.isdigit():
-        raise ValueError("BULK_EXPORT_FOLDER_ID is not configured")
-    source_file_id = str(bulk_row.get("source_file_id") or "")
-    if not source_file_id.isdigit():
-        raise ValueError("Bulk Read source file identifier is invalid")
+    from storage.extract_store import download_extract_to_tempfile
 
-    temp_file = tempfile.NamedTemporaryFile(prefix="ada_bulk_", suffix=".zip", delete=False)
-    temp_path = temp_file.name
-    source_hash = hashlib.sha256()
-    try:
-        response = (
-            app.filestore()
-            .folder(int(folder_id))
-            .get_file_stream(int(source_file_id))
-        )
-        with temp_file:
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    source_hash.update(chunk)
-                    temp_file.write(chunk)
-        if source_hash.hexdigest() != bulk_row.get("source_file_checksum"):
-            raise ValueError("Downloaded File Store checksum does not match")
-        return temp_path
-    except Exception:
-        try:
-            temp_file.close()
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        raise
+    return download_extract_to_tempfile(
+        bulk_row,
+        app=app,
+        prefix="ada_bulk_",
+        suffix=".zip",
+        require_checksum=True,
+    )
 
 
 def process_and_finalize(app, task_row):
@@ -1512,6 +1515,7 @@ def process_and_finalize(app, task_row):
                         partial = reusable_partial or _new_partial(field_names)
                         owner_partials = {}
                         record_findings = []
+                        jsonl_lines = []
                         if reusable_partial is None:
                             batch_table.update_row(
                                 {
@@ -1578,10 +1582,18 @@ def process_and_finalize(app, task_row):
                                         finding_summary["stateCounts"]["proper"] += 1
                                     elif finding["invalidCount"] > 0:
                                         finding_summary["stateCounts"]["inaccurate"] += 1
-                                        record_findings.append(finding)
+                                        record_findings.append(
+                                            _attach_sidecar_line(
+                                                finding, fields, jsonl_lines
+                                            )
+                                        )
                                     elif finding["missingCount"] > 0:
                                         finding_summary["stateCounts"]["incomplete"] += 1
-                                        record_findings.append(finding)
+                                        record_findings.append(
+                                            _attach_sidecar_line(
+                                                finding, fields, jsonl_lines
+                                            )
+                                        )
                                     else:
                                         finding_summary["stateCounts"]["proper"] += 1
 
@@ -1650,11 +1662,14 @@ def process_and_finalize(app, task_row):
                                         ):
                                             group["severity"] = issue["severity"]
 
-                            stored_findings = record_findings[:remaining_finding_samples]
+                            issue_sample = record_findings[
+                                : max(0, remaining_finding_samples)
+                            ]
                             with profiler.stage(
                                 "persist_record_findings",
                                 batchNumber=int(batch_row["batch_number"]),
-                                storedFindingCount=len(stored_findings),
+                                storedFindingCount=len(record_findings),
+                                storedIssueSampleCount=len(issue_sample),
                             ):
                                 _persist_record_findings(
                                     app,
@@ -1662,10 +1677,23 @@ def process_and_finalize(app, task_row):
                                     module_row,
                                     batch_row,
                                     bulk_row["source_file_checksum"],
-                                    stored_findings,
+                                    record_findings,
+                                    issue_sample,
                                 )
-                            finding_summary["storedSampleCount"] += len(stored_findings)
-                            remaining_finding_samples -= len(stored_findings)
+                            finding_summary["storedSampleCount"] += len(issue_sample)
+                            remaining_finding_samples -= len(issue_sample)
+                            with profiler.stage(
+                                "write_fix_sidecar",
+                                batchNumber=int(batch_row["batch_number"]),
+                                sidecarLineCount=len(jsonl_lines),
+                            ):
+                                _write_fix_sidecar(
+                                    app,
+                                    scan_row.get("scan_id"),
+                                    module_row.get("module_api_name"),
+                                    batch_row.get("batch_number"),
+                                    jsonl_lines,
+                                )
                             partials.append(partial)
                         profiler.meta.setdefault("batchDeltas", []).append(
                             {

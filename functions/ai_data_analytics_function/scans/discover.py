@@ -6,12 +6,14 @@ import logging
 import zcatalyst_sdk
 from flask import Request
 
+from analytics.repository import find_owned_scan
 from common.core import (
     API_VERSION,
     DISCOVERED_FIELD_PLAN_VERSION,
     DiscoveryError,
     RULE_VERSION,
     canonical_hash,
+    get_current_user_id,
     json_response,
 )
 from connections.repository import scan_crm_provider
@@ -41,6 +43,11 @@ def discover_scan(request: Request, datastore, scan_id: str, connection_row=None
     scan_row = scan_rows[0]["scan_jobs"]
 
     if scan_crm_provider(scan_row) == "salesforce":
+        if not find_owned_scan(zcql, scan_id, get_current_user_id(request)):
+            return json_response(
+                {"error": {"code": "SCAN_NOT_FOUND", "message": "Scan was not found"}},
+                404,
+            )
         return json_response(
             {
                 "error": {

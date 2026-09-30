@@ -30,12 +30,24 @@ SALESFORCE_SCAN_CLOCK_FIELDS = {
 
 
 def resolve_active_crm_connection(zcql, user_id):
-    """Return (provider, row) for the exclusive-active CRM connection."""
-    from connections.repository import find_active_connection
-    from salesforce.oauth import find_active_salesforce_connection
+    """Return (provider, row) for the exclusive-active CRM connection.
 
-    salesforce_row = find_active_salesforce_connection(zcql, user_id)
-    zoho_row = find_active_connection(zcql, user_id)
+    Used by scan creation. Marketplace-linked rows resolve through active
+    installation membership. Standalone rows (null installation_id) resolve
+    through connection user_id ownership.
+    """
+    from installations.authorization import find_accessible_active_connection
+    from installations.repository import (
+        SALESFORCE_CONNECTIONS_TABLE,
+        ZOHO_CONNECTIONS_TABLE,
+    )
+
+    salesforce_row = find_accessible_active_connection(
+        zcql, SALESFORCE_CONNECTIONS_TABLE, user_id
+    )
+    zoho_row = find_accessible_active_connection(
+        zcql, ZOHO_CONNECTIONS_TABLE, user_id
+    )
     if salesforce_row and zoho_row:
         salesforce_key = (
             str(salesforce_row.get("last_selected_at") or ""),

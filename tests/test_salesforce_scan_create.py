@@ -604,8 +604,15 @@ class SalesforceScanOwnershipTests(unittest.TestCase):
                 queries.append(query)
                 if "from scan_jobs" in query:
                     return [{"scan_jobs": scan}]
-                if "from salesforce_connections" in query and "user-1" in query:
-                    return [{"salesforce_connections": {"ROWID": "555"}}]
+                if "from salesforce_connections" in query:
+                    return [
+                        {
+                            "salesforce_connections": {
+                                "ROWID": "555",
+                                "user_id": "user-1",
+                            }
+                        }
+                    ]
                 if "from zoho_connections" in query:
                     raise AssertionError(
                         "Salesforce ownership must not query zoho_connections"
@@ -631,7 +638,14 @@ class SalesforceScanOwnershipTests(unittest.TestCase):
                 if "from scan_jobs" in query:
                     return [{"scan_jobs": scan}]
                 if "from salesforce_connections" in query:
-                    return [{"salesforce_connections": {"ROWID": "999"}}]
+                    return [
+                        {
+                            "salesforce_connections": {
+                                "ROWID": "555",
+                                "user_id": "user-1",
+                            }
+                        }
+                    ]
                 return []
 
         self.assertIsNone(find_owned_scan(Zcql(), "scan_abc", "user-2"))
@@ -648,7 +662,9 @@ class SalesforceScanOwnershipTests(unittest.TestCase):
                 if "from scan_jobs" in query:
                     return [{"scan_jobs": scan}]
                 if "from zoho_connections" in query:
-                    return [{"zoho_connections": {"ROWID": "111"}}]
+                    return [
+                        {"zoho_connections": {"ROWID": "111", "user_id": "user-1"}}
+                    ]
                 return []
 
         owned = find_owned_scan(Zcql(), "scan_zoho", "user-1")

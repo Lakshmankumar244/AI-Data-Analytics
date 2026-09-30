@@ -7,6 +7,7 @@ and continues through PREPARE_BATCHES / PROCESS_BATCHES.
 """
 
 import logging
+from datetime import datetime, timezone
 
 import zcatalyst_sdk
 
@@ -19,6 +20,7 @@ from lease import (
 from requeue import requeue_salesforce_orchestrate_task
 from submit_bulk import submit_one_salesforce_bulk_job
 from task_resolve import (
+    EXPORT_FIX_XLSX,
     SALESFORCE_TASK_TYPE,
     SalesforceWorkerError,
     resolve_salesforce_task,
@@ -27,7 +29,7 @@ from task_resolve import (
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_TASK_TYPES = frozenset({SALESFORCE_TASK_TYPE})
+ALLOWED_TASK_TYPES = frozenset({SALESFORCE_TASK_TYPE, EXPORT_FIX_XLSX})
 
 
 def _job_params(job_request):
@@ -167,6 +169,21 @@ def _release_blocked_claim(app, task_row, result):
         )
 
 
+def _mark_task_succeeded(app, task_row):
+    if not task_row or not task_row.get("ROWID"):
+        return
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    app.datastore().table("pipeline_tasks").update_row(
+        {
+            "ROWID": task_row["ROWID"],
+            "status": "SUCCEEDED",
+            "completed_at": now,
+            "controlled_error_code": "",
+        }
+    )
+    task_row["status"] = "SUCCEEDED"
+
+
 def handler(job_request, context):
     task_row = None
     resolved = None
@@ -200,6 +217,19 @@ def handler(job_request, context):
                 "status": "RUNNING",
             }
         _event_log("SALESFORCE_TASK_CLAIMED", resolved, pipeline_task_status="RUNNING")
+        if str(task_row.get("task_type") or "") == EXPORT_FIX_XLSX:
+            from shared.fix_export import export_fix_xlsx
+
+            result = export_fix_xlsx(app, task_row)
+            _mark_task_succeeded(app, task_row)
+            _event_log(
+                "SALESFORCE_FIX_EXPORT_SUCCEEDED",
+                resolved,
+                result,
+                pipeline_task_status="SUCCEEDED",
+            )
+            context.close_with_success()
+            return result
         result = submit_one_salesforce_bulk_job(app, resolved)
         if isinstance(result, dict) and result.get("outcome") in {
             "READY_TO_DOWNLOAD",

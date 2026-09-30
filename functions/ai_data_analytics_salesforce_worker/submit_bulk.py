@@ -17,6 +17,7 @@ from salesforce.bulk_query import (
     poll_salesforce_query_job,
     submit_salesforce_query_job,
 )
+from storage.locator import has_extract_locator
 from task_resolve import (
     SalesforceWorkerError,
     find_bulk_jobs_for_module,
@@ -184,11 +185,11 @@ def _select_work(zcql, scan_row):
             status = str(bulk_row.get("status") or "")
             if _provider_job_id(bulk_row):
                 if status in DOWNLOADABLE_BULK_STATUSES or (
-                    status == "DOWNLOAD_UNKNOWN" and not bulk_row.get("source_file_id")
+                    status == "DOWNLOAD_UNKNOWN" and not has_extract_locator(bulk_row)
                 ):
                     return module_row, bulk_row, "download"
                 if status in PROCESSABLE_BULK_STATUSES or (
-                    status == "PROCESSING" and bulk_row.get("source_file_id")
+                    status == "PROCESSING" and has_extract_locator(bulk_row)
                 ):
                     return module_row, bulk_row, "process"
                 if status in {"DOWNLOADING", "DOWNLOAD_UNKNOWN"}:

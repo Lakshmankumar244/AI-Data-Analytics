@@ -1,3 +1,4 @@
 zcatalyst-sdk==1.4.0
 requests
 flask
+xlsxwriter

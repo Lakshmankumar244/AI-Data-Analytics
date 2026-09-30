@@ -129,9 +129,6 @@ export default function ConnectScreen() {
   const [connectingProvider, setConnectingProvider] = useState(null);
 
   useEffect(() => {
-    if (connectingProvider === "zoho") {
-      window.location.assign(api.ZOHO_CONSENT_URL);
-    }
     if (connectingProvider === "salesforce") {
       window.location.assign(api.SALESFORCE_CONSENT_URL);
     }
@@ -199,7 +196,10 @@ export default function ConnectScreen() {
             logo={<ZohoMark size={40} />}
             buttonLabel="Connect Zoho CRM"
             buttonIcon={<ZohoMark size={16} />}
-            onConnect={() => setConnectingProvider("zoho")}
+            onConnect={() => {
+              setConnectingProvider("zoho");
+              window.location.assign(api.zohoConsentUrl());
+            }}
             notice={connectionNotice}
             status={zohoStatus}
           />

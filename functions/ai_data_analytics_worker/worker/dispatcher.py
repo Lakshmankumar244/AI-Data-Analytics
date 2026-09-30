@@ -18,4 +18,8 @@ def dispatch_task(app, task_row):
         return {"prepare": prepare_result, "processBatches": process_result}
     if task_type == "PROCESS_BATCHES":
         return process_and_finalize(app, task_row)
+    if task_type == "EXPORT_FIX_XLSX":
+        from shared.fix_export import export_fix_xlsx
+
+        return export_fix_xlsx(app, task_row)
     raise ValueError(f"Unsupported task type {task_type}")
